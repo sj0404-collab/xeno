@@ -99,6 +99,29 @@ jobs:
           restore-keys: |
             gradle-Linux-
 
+      # Fast-forward the restored LLVM build tree.
+      #
+      # A restored cache hands the objects back with their ORIGINAL mtimes, and
+      # the fresh git checkout re-stamps every source with a NEWER mtime, so
+      # ninja considers all ~3000 LLVM objects stale and rebuilds them (a ~50
+      # minute nop). Bumping only the LLVM subtree's mtimes up to "now" makes
+      # ninja see it as up to date; RPCS3/3rdparty objects are left alone so a
+      # real core change still recompiles. This is safe ONLY when the cache that
+      # was restored was built from the current LLVM pin -- check that the
+      # matched key carries the exact llvm-<sha> we are about to build, and skip
+      # the fast-forward otherwise so a toolchain bump rebuilds from scratch.
+      - name: Fast-forward restored LLVM build tree
+        if: steps.build-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          CURRENT_LLVM="llvm-$(git -C 3rdparty/llvm/llvm rev-parse --short=12 HEAD)"
+          if [[ "${{ steps.build-cache.outputs.cache-matched-key }}" == *"$CURRENT_LLVM"* ]]; then
+            find "${{ github.workspace }}/build-a13/3rdparty/llvm/llvm_build" -exec touch {} + 2>/dev/null || true
+            echo "fast-forwarded restored LLVM tree for ${CURRENT_LLVM}"
+          else
+            echo "restored cache is from a different LLVM pin, leaving mtimes untouched"
+          fi
+
       # The image rarely changes; type=gha layer cache restores the SDK/NDK
       # layers in seconds on every run instead of re-staging ~4 GB up front.
       - name: Set up Docker Buildx
