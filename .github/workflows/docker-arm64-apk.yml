@@ -137,6 +137,11 @@ jobs:
         env:
           VARIANTS: "${{ github.event.inputs.variant || 'a13' }}"
         run: |
+          # OUT_DIR is /src/out; build-variants.sh does not mkdir it, and the
+          # bind mount only creates /src, so the final APK copy would fail
+          # "No such file or directory" without this.
+          mkdir -p "${{ github.workspace }}/out"
+
           # Retry the whole build (ninja is incremental, so re-entry is cheap;
           # the exposure is Gradle pulling resolve-time deps on a cold cache).
           status=1
