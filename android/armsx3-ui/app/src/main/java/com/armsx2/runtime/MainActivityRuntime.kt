@@ -759,7 +759,7 @@ open class MainActivityRuntime : ComponentActivity() {
                     if (booted && ghSnapshot.autoPush && ghSnapshot.token != null) {
                         kotlin.concurrent.thread(name = "github-sync-exit") {
                             runCatching {
-                                val pushed = com.armsx2.GithubSaveSync.pushAll()
+                                val pushed = kotlinx.coroutines.runBlocking { com.armsx2.GithubSaveSync.pushAll() }
                                 android.util.Log.i("GithubSaveSync", "game-exit sync pushed $pushed save(s)")
                             }
                         }
