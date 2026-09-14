@@ -106,87 +106,112 @@ object GithubSaveSync {
         }
     }
 
-    /** Push every installed save folder. Returns the number successfully uploaded. */
+    /** Push every installed save folder. Returns the number successfully uploaded.
+     *  Serialized against WebDAV push/pull through [CloudSync.syncMutex]: a game-exit
+     *  sync fires both transports in parallel, and archiving the same savedata
+     *  concurrently is how truncated/corrupt archives reach the cloud. */
     suspend fun pushAll(): Int = withContext(Dispatchers.IO) {
         val t = token ?: return@withContext 0
         val root = SaveDataImporter.savedataRoot() ?: return@withContext 0
         var pushed = 0
         try {
-            val (owner, repoName, branch) = ensureRepo(t)
-            root.listFiles().orEmpty()
-                .filter { it.isDirectory && !it.name.startsWith(".") }
-                .forEach { dir ->
-                    val zip = CloudSync.saveArchive(dir, dir.name) ?: return@forEach
-                    try {
-                        if (zip.length() > MAX_GITHUB_BYTES) {
-                            Log.w(TAG, "save '${dir.name}' is ${zip.length()} B, over the 90 MB GitHub cap; skipping")
-                            return@forEach
+            kotlinx.coroutines.sync.withLock(com.armsx2.CloudSync.syncMutex) {
+                val (owner, repoName, branch) = ensureRepo(t)
+                root.listFiles().orEmpty()
+                    .filter { it.isDirectory && !it.name.startsWith(".") }
+                    .forEach { dir ->
+                        val zip = CloudSync.saveArchive(dir, dir.name) ?: return@forEach
+                        try {
+                            if (zip.length() > MAX_GITHUB_BYTES) {
+                                Log.w(TAG, "save '${dir.name}' is ${zip.length()} B, over the 90 MB GitHub cap; skipping")
+                                return@forEach
+                            }
+                            val path = "saves/${Uri.encode(dir.name)}.zip"
+                            val sha = findSha(owner, repoName, branch, "saves", "${dir.name}.zip")
+                            val json = JSONObject()
+                                .put("message", "ARMSX3 save sync: ${dir.name}")
+                                .put("content", Base64.getEncoder().encodeToString(zip.readBytes()))
+                                .apply { if (sha != null) put("sha", sha) }
+                            val res = putJson("repos/$owner/$repoName/contents/$path", json.toString())
+                            if (res != null) pushed++
+                            Log.i(TAG, "pushed ${dir.name} (${zip.length()} B)")
+                        } finally {
+                            zip.delete()
                         }
-                        val path = "saves/${Uri.encode(dir.name)}.zip"
-                        val sha = findSha(owner, repoName, branch, "saves", "${dir.name}.zip")
-                        val json = JSONObject()
-                            .put("message", "ARMSX3 save sync: ${dir.name}")
-                            .put("content", Base64.getEncoder().encodeToString(zip.readBytes()))
-                            .apply { if (sha != null) put("sha", sha) }
-                        val res = putJson("repos/$owner/$repoName/contents/$path", json.toString())
-                        if (res != null) pushed++
-                        Log.i(TAG, "pushed ${dir.name} (${zip.length()} B)")
-                    } finally {
-                        zip.delete()
                     }
-                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "pushAll failed: ${e.message}")
         }
         pushed
     }
 
-    /** Pull every <titleId>.zip found in the remote repo into savedata. Returns the count pulled. */
+    /** Pull every <titleId>.zip found in the remote repo into savedata. Returns the count pulled.
+     *  Serialized with [CloudSync.pushAllSaves]/[pullAllSaves] through [CloudSync.syncMutex]. */
     suspend fun pullAll(): Int = withContext(Dispatchers.IO) {
         val t = token ?: return@withContext 0
         val dest = SaveDataImporter.savedataRoot() ?: return@withContext 0
         var pulled = 0
         try {
-            val (owner, repoName, branch) = ensureRepo(t)
-            val entries = listContents(owner, repoName, branch, "saves")
-            entries.forEach { item ->
-                val name = item.optString("name")
-                if (!name.endsWith(".zip")) return@forEach
-                val titleId = name.removeSuffix(".zip")
-                if (titleId.isBlank()) return@forEach
-                // A malicious repo could name a zip so titleId resolves outside savedata/
-                // ("..", a leading dot, or a path separator route the File() below astray).
-                if (titleId.startsWith(".") || titleId.contains('/') || titleId.contains('\\') ||
-                    titleId.split('/').any { it == ".." || it == "." }
-                ) {
-                    Log.w(TAG, "skipping pull of unsafe name '$name'")
-                    return@forEach
-                }
-                val encoded = Uri.encode(name)
-                val zipBytes = getRaw("repos/$owner/$repoName/contents/saves/$encoded?ref=$branch") ?: return@forEach
-                val staged = File(RPCSX.rootDirectory + "cache/sync-stage", "gh-$encoded")
-                try {
-                    staged.parentFile?.mkdirs()
-                    if (staged.exists()) staged.delete()
-                    staged.writeBytes(zipBytes)
-                    // Extract into a staging folder FIRST so a corrupt/truncated archive can
-                    // never wipe the local save: the real title dir is only replaced once the
-                    // whole zip unpacked cleanly. Dot-prefixed so the push side skips it.
-                    val stageName = ".gh-stage-$titleId"
-                    if (CloudSync.unzipSaveArchive(staged, dest, stageName)) {
-                        val stagedDir = File(dest, stageName)
-                        val target = File(dest, titleId)
-                        if (target.exists()) target.deleteRecursively()
-                        if (stagedDir.renameTo(target)) pulled++
-                        else stagedDir.deleteRecursively()
-                        Log.i(TAG, "pulled $name (${zipBytes.size} B)")
-                    } else {
-                        File(dest, stageName).deleteRecursively()
-                        Log.w(TAG, "pull of $name failed; local save left untouched")
+            kotlinx.coroutines.sync.withLock(com.armsx2.CloudSync.syncMutex) {
+                val (owner, repoName, branch) = ensureRepo(t)
+                val entries = listContents(owner, repoName, branch, "saves")
+                entries.forEach { item ->
+                    val name = item.optString("name")
+                    if (!name.endsWith(".zip")) return@forEach
+                    val titleId = name.removeSuffix(".zip")
+                    if (titleId.isBlank()) return@forEach
+                    // A malicious repo could name a zip so titleId resolves outside savedata/
+                    // ("..", a leading dot, or a path separator route the File() below astray).
+                    if (titleId.startsWith(".") || titleId.contains('/') || titleId.contains('\\') ||
+                        titleId.split('/').any { it == ".." || it == "." }
+                    ) {
+                        Log.w(TAG, "skipping pull of unsafe name '$name'")
+                        return@forEach
                     }
-                    staged.delete()
-                } finally {
-                    staged.delete()
+                    val encoded = Uri.encode(name)
+                    val zipBytes = getRaw("repos/$owner/$repoName/contents/saves/$encoded?ref=$branch") ?: return@forEach
+                    val staged = File(RPCSX.rootDirectory + "cache/sync-stage", "gh-$encoded")
+                    try {
+                        staged.parentFile?.mkdirs()
+                        if (staged.exists()) staged.delete()
+                        staged.writeBytes(zipBytes)
+                        // Extract into a staging folder FIRST so a corrupt/truncated archive can
+                        // never wipe the local save: the real title dir is only replaced once the
+                        // whole zip unpacked cleanly. Dot-prefixed so the push side skips it.
+                        val stageName = ".gh-stage-$titleId"
+                        if (CloudSync.unzipSaveArchive(staged, dest, stageName)) {
+                            val stagedDir = File(dest, stageName)
+                            val target = File(dest, titleId)
+                            val backup = File(dest, ".gh-old-$titleId")
+                            val swapped = try {
+                                // Delete the stale backup only when one exists AND the target is
+                                // actually being replaced; abort cleanly otherwise, never going
+                                // through a window with no save on disk.
+                                if (backup.exists() && !backup.deleteRecursively()) false
+                                else if (!target.exists()) stagedDir.renameTo(target)
+                                else if (target.renameTo(backup)) {
+                                    if (stagedDir.renameTo(target)) {
+                                        backup.deleteRecursively()
+                                        true
+                                    } else {
+                                        backup.renameTo(target)
+                                        false
+                                    }
+                                } else false
+                            } catch (e: Exception) {
+                                Log.w(TAG, "swap failed for $titleId: ${e.message}")
+                                false
+                            }
+                            if (swapped) pulled++ else stagedDir.deleteRecursively()
+                            Log.i(TAG, "pulled $name (${zipBytes.size} B)")
+                        } else {
+                            File(dest, stageName).deleteRecursively()
+                            Log.w(TAG, "pull of $name failed; local save left untouched")
+                        }
+                    } finally {
+                        staged.delete()
+                    }
                 }
             }
         } catch (e: Exception) {

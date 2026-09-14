@@ -80,6 +80,11 @@ namespace fs
         // Returns cached chunk if present, nullptr otherwise
         http_chunk* get(u64 chunk_offset);
 
+        // Copies len bytes out of a cached chunk under the lock; returns false
+        // if the chunk is absent or the range exceeds the chunk's data. Safe
+        // to call while another thread may put()/evict chunks.
+        bool read(u64 chunk_offset, u64 start, u64 len, void* dst);
+
         // Inserts a chunk into the cache; evicts LRU if full
         void put(std::unique_ptr<http_chunk> chunk);
 

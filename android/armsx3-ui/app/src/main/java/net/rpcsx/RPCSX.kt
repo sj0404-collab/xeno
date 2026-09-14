@@ -41,7 +41,9 @@ enum class EmulatorState {
     Starting;
 
     companion object {
-        fun fromInt(value: Int) = EmulatorState.entries.first { it.ordinal == value }
+        // Total rather than throwing (like BootResult): an unrecognised code means the enums
+        // have drifted again, and reporting that as Stopped beats taking the app down with it.
+        fun fromInt(value: Int) = entries.getOrNull(value) ?: Stopped
     }
 }
 

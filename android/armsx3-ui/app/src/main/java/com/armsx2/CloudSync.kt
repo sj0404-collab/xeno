@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import net.rpcsx.RPCSX
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -59,6 +60,17 @@ object CloudSync {
     var config: Config? = null
 
     /**
+     * Serializes save push/pull/extract across every transport.
+     *
+     * The game-exit path fires the WebDAV and GitHub pushes as two parallel
+     * threads, and a UI push/pull may overlap either. Without a common gate a
+     * push can archive a folder mid-replace (garbage zip uploaded) or two
+     * pushes can race the same staging file. Both transports acquire this
+     * before touching savedata or the sync-stage directory.
+     */
+    internal val syncMutex = kotlinx.coroutines.sync.Mutex()
+
+    /**
      * Consistent capture of config + autoPush for use off the UI thread.
      *
      * The two are separate @Volatile fields and a caller that checks one then
@@ -96,8 +108,10 @@ object CloudSync {
     private fun encodeUserInfo(s: String): String =
         java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
-    /** Password-less copy of an URL for logs: `scheme://user:***@host/...`. */
-    private fun redactUrl(url: String): String {
+    /** Password-less copy of an URL for logs: `scheme://user:***@host/...`. Shared with
+     *  [com.armsx2.runtime.MainActivityRuntime] so the launch diagnostics never leak
+     *  stream credentials into logcat. */
+    internal fun redactUrl(url: String): String {
         val sep = url.indexOf("://")
         if (sep < 0) return url
         val at = url.indexOf('@', sep + 3)
@@ -164,11 +178,16 @@ object CloudSync {
 
     /** .zip of the whole savedata root, named "<titleId>.zip".
      *  Returns null when the archive exceeds the size or entry caps — the
-     *  caller must treat that as "this title did not sync", not crash. */
+     *  caller must treat that as "this title did not sync", not crash.
+     *
+     *  The staging file name carries a per-call suffix: the game-exit path can
+     *  run the WebDAV and GitHub pushes at the same time, and a fixed path would
+     *  have two threads truncate/interleave the same file. Every caller deletes
+     *  only the File it got back. */
     internal fun saveArchive(dir: File, titleId: String): File? {
         val staged = File(RPCSX.rootDirectory + "cache/sync-stage")
         staged.mkdirs()
-        val out = File(staged, "$titleId.zip")
+        val out = File(staged, "$titleId-${System.nanoTime()}.zip")
         try {
             var total = 0L
             var entries = 0
@@ -279,29 +298,52 @@ object CloudSync {
         val staged = File(RPCSX.rootDirectory + "cache/sync-stage", "dl-$safeTitle.zip")
         staged.parentFile?.mkdirs()
 
-        val ok = http("saves/${safeTitle}.zip", "GET") { conn ->
-            conn.inputStream.use { input ->
-                FileOutputStream(staged).use { it.write(input.readBytes()) }
+        try {
+            val ok = http("saves/${safeTitle}.zip", "GET") { conn ->
+                conn.inputStream.use { input ->
+                    FileOutputStream(staged).use { input.copyTo(it) }
+                }
+            } in 200..204
+
+            if (!ok) return@withContext false
+
+            // Extract into a dot-prefixed staging folder FIRST so a corrupt or truncated
+            // archive can never wipe the local save: unzipSaveArchive only ever touches
+            // the folder it is given. The real title dir is swapped in only after a
+            // clean unzip (same stage-then-swap contract as the GitHub transport).
+            val stageName = ".$safeTitle.staging"
+            if (!unzipSaveArchive(staged, dest, stageName)) return@withContext false
+
+            val stagedDir = File(dest, stageName)
+            val target = File(dest, safeTitle)
+            val backup = File(dest, ".$safeTitle.old")
+            val swapped = try {
+                if (backup.exists() && !backup.deleteRecursively()) false
+                else if (!target.exists()) stagedDir.renameTo(target)
+                else if (target.renameTo(backup)) {
+                    if (stagedDir.renameTo(target)) {
+                        backup.deleteRecursively()
+                        true
+                    } else {
+                        // Put the old data back before reporting failure.
+                        backup.renameTo(target)
+                        false
+                    }
+                } else false
+            } catch (e: Exception) {
+                Log.e(TAG, "save swap failed for $safeTitle", e)
+                false
             }
-        } in 200..204
-
-        if (!ok) return@withContext false
-
-        // Replace the title's save directories atomically.
-        val target = File(dest, safeTitle)
-        if (target.exists()) target.deleteRecursively()
-        val extracted = unzipSaveArchive(staged, dest, safeTitle)
-        staged.delete()
-        if (!extracted) {
-            target.deleteRecursively()
-            return@withContext false
+            if (!swapped) File(dest, stageName).deleteRecursively()
+            swapped
+        } finally {
+            staged.delete()
         }
-        true
     }
 
     /** Upload every installed save folder. Return the number successfully pushed. */
-    suspend fun pushAllSaves(): Int {
-        val root = SaveDataImporter.savedataRoot() ?: return 0
+    suspend fun pushAllSaves(): Int = syncMutex.withLock {
+        val root = SaveDataImporter.savedataRoot() ?: return@withLock 0
         var pushed = 0
         root.listFiles().orEmpty()
             .filter { it.isDirectory && !it.name.startsWith(".") }
@@ -310,7 +352,7 @@ object CloudSync {
                 if (uploadArchive(zip, dir.name)) pushed++
                 zip.delete()
             }
-        return pushed
+        pushed
     }
 
     /** Pull the remote save archive for every locally known title, plus every
@@ -321,8 +363,8 @@ object CloudSync {
      *  existed on the device, so an empty install pulled nothing. Servers with
      *  no PROPFIND (a bare static HTTP folder) return an empty listing and we
      *  degrade to the local-only behaviour unchanged. */
-    suspend fun pullAllSaves(): Int {
-        val root = SaveDataImporter.savedataRoot() ?: return 0
+    suspend fun pullAllSaves(): Int = syncMutex.withLock {
+        val root = SaveDataImporter.savedataRoot() ?: return@withLock 0
         val local = root.listFiles().orEmpty()
             .filter { it.isDirectory && !it.name.startsWith(".") }
             .map { it.name }
@@ -334,7 +376,7 @@ object CloudSync {
 
         var pulled = 0
         targets.forEach { if (downloadSaves(it)) pulled++ }
-        return pulled
+        pulled
     }
 
     /**
@@ -543,8 +585,24 @@ object CloudSync {
         try {
             headers(conn)
             conn.connect()
-            if (method != "GET" && method != "HEAD" && method != "DELETE") { body(conn) }
-            runCatching { conn.responseCode }.getOrDefault(-1)
+            when {
+                // GET bodies carry the response payload: stream it only on success and
+                // surface a failed read as -1 (not 2xx), so callers never treat a partial
+                // download as complete. The old guard skipped the body for GET outright,
+                // so WebDAV save pulls and game downloads silently did nothing.
+                method == "GET" -> {
+                    val code = runCatching { conn.responseCode }.getOrDefault(-1)
+                    if (code in 200..204 && runCatching { body(conn) }.isFailure) -1 else code
+                }
+                // HEAD/DELETE produce no body to consume.
+                method == "HEAD" || method == "DELETE" ->
+                    runCatching { conn.responseCode }.getOrDefault(-1)
+                // PUT/POST/PROPFIND write a request body first; the status is read after.
+                else -> {
+                    body(conn)
+                    runCatching { conn.responseCode }.getOrDefault(-1)
+                }
+            }
         } finally {
             conn.disconnect()
         }

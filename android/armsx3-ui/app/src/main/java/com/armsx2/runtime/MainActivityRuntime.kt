@@ -646,7 +646,7 @@ open class MainActivityRuntime : ComponentActivity() {
                 var booted = false
                 try {
                     eState.value = EmuState.RUNNING
-                    println("@@ANDROID_START_VM@@ kind=game path=${m_szGamefile.take(240)}")
+                    println("@@ANDROID_START_VM@@ kind=game path=${com.armsx2.CloudSync.redactUrl(m_szGamefile.take(240))}")
 
                     // Push the curated settings before the VM reads them.
                     //
@@ -713,7 +713,7 @@ open class MainActivityRuntime : ComponentActivity() {
                     // PKG game", which the user can actually fix.
                     if (!booted) {
                         val reason = com.armsx3.Rpcs3Bridge.lastBootError ?: "unknown"
-                        println("@@ANDROID_BOOT_FAILED@@ reason=$reason path=${m_szGamefile.take(240)}")
+                        println("@@ANDROID_BOOT_FAILED@@ reason=$reason path=${com.armsx2.CloudSync.redactUrl(m_szGamefile.take(240))}")
                         // The library normally intercepts a locked game before it ever boots
                         // (HomeViewModel.launch), so reaching here means the lock state was
                         // stale — a licence deleted outside the app, say. Point at the per-game
@@ -992,7 +992,7 @@ open class MainActivityRuntime : ComponentActivity() {
             if (info != null) contextGame.value = info
             println(
                 "@@ANDROID_LAUNCH_GAME@@ title=${info?.title ?: "<direct>"} " +
-                    "uri=${uri.take(240)} state=${eState.value} runLoop=$vmRunLoopActive " +
+                    "uri=${com.armsx2.CloudSync.redactUrl(uri.take(240))} state=${eState.value} runLoop=$vmRunLoopActive " +
                     "stopping=$vmStopInProgress nativeReady=${nativeReady.value}"
             )
             // Refresh the ANGLE EGL env before the GS thread opens the GL context, so a
@@ -1004,7 +1004,7 @@ open class MainActivityRuntime : ComponentActivity() {
             // and crashes with no error. Defer until nativeReady; the LaunchedEffect
             // watching pendingLaunch fires it once init completes.
             if (!nativeReady.value) {
-                println("@@ANDROID_LAUNCH_DEFER@@ nativeReady=false — queuing '${info?.title ?: uri.take(80)}'")
+                println("@@ANDROID_LAUNCH_DEFER@@ nativeReady=false — queuing '${info?.title ?: com.armsx2.CloudSync.redactUrl(uri.take(80))}'")
                 pendingLaunch.value = uri to info
                 return
             }

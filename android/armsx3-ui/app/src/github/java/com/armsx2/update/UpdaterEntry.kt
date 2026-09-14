@@ -262,6 +262,8 @@ fun AutoUpdateGate() {
                         scope.launch {
                             try {
                                 downloadAndInstall(context, avail) { pct -> state = UpdateState.Downloading(pct) }
+                            } catch (e: Exception) {
+                                state = UpdateState.Error("$downloadFailedPrefix: ${e.message}")
                             } finally {
                                 state = UpdateState.Idle
                             }
@@ -464,6 +466,11 @@ private suspend fun downloadAndInstall(context: Context, info: UpdateState.Avail
                         }
                     }
                 }
+            }
+            // A mid-transfer drop looks like a clean EOF — verify the byte count or a
+            // truncated APK goes to the installer as "problem parsing the package".
+            if (total > 0 && read != total) {
+                throw java.io.IOException("Incomplete download: $read of $total bytes")
             }
         } finally {
             conn.disconnect()

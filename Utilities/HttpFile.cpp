@@ -3,8 +3,11 @@
 
 #include <curl/curl.h>
 
-#include <cstring>
 #include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <limits>
+#include <mutex>
 #include <numeric>
 #include <string_view>
 
@@ -42,6 +45,20 @@ namespace
         u64 content_length = 0;
     };
 
+    // Parse a decimal header value into a positive u64. Returns false on
+    // overflow, empty input or zero, so a malformed Content-* header is
+    // ignored instead of producing an absurd size.
+    bool parse_u64(std::string_view str, u64& out)
+    {
+        errno = 0;
+        char* end = nullptr;
+        const u64 value = std::strtoull(str.data(), &end, 10);
+        if (errno == ERANGE || end == str.data() || value == 0)
+            return false;
+        out = value;
+        return true;
+    }
+
     size_t http_header_cb(char* data, size_t size, size_t nmemb, void* userp)
     {
         const size_t n = size * nmemb;
@@ -53,7 +70,7 @@ namespace
 
         if (line.find("Content-Length:") == 0)
         {
-            headers->content_length = std::strtoull(line.data() + 15, nullptr, 10);
+            parse_u64(line.substr(15), headers->content_length);
         }
         else if (line.find("Content-Range:") == 0)
         {
@@ -61,7 +78,7 @@ namespace
             const auto slash = line.rfind('/');
             if (slash != std::string_view::npos)
             {
-                headers->content_length = std::strtoull(line.data() + slash + 1, nullptr, 10);
+                parse_u64(line.substr(slash + 1), headers->content_length);
             }
         }
 
@@ -142,6 +159,25 @@ namespace fs
         m_lru_order.push_front(chunk_offset);
 
         return it->second.get();
+    }
+
+    bool http_chunk_cache::read(u64 chunk_offset, u64 start, u64 len, void* dst)
+    {
+        std::lock_guard lock(m_mutex);
+        auto it = m_chunks.find(chunk_offset);
+        if (it == m_chunks.end())
+            return false;
+
+        http_chunk* chunk = it->second.get();
+        if (start + len > chunk->size)
+            return false;
+
+        // Move to front of LRU
+        m_lru_order.remove(chunk_offset);
+        m_lru_order.push_front(chunk_offset);
+
+        std::memcpy(dst, chunk->data.data() + start, len);
+        return true;
     }
 
     void http_chunk_cache::put(std::unique_ptr<http_chunk> chunk)
@@ -321,7 +357,7 @@ namespace fs
 
         long status = 0;
         curl_easy_getinfo(m_curl.get(), CURLINFO_RESPONSE_CODE, &status);
-        if (status != 200 && status != 206)
+        if (status != 206 && (status != 200 || offset != 0))
         {
             fs_http.error("Range GET %llu-%llu: HTTP %ld", offset, offset + length - 1, status);
             m_curl.close();
@@ -409,20 +445,18 @@ namespace fs
             u64 remaining = count - total_read;
             u64 chunk_avail = std::min(HTTP_CHUNK_SIZE - chunk_start, remaining);
 
-            http_chunk* cached = m_cache.get(chunk_offset);
-            if (!cached)
+            // Copy under the cache lock so a concurrent prefetch eviction
+            // cannot free the chunk mid-transfer.
+            if (!m_cache.read(chunk_offset, chunk_start, chunk_avail, ptr + total_read))
             {
                 // Cache miss — fetch synchronously
                 if (!fetch_chunk(chunk_offset))
                     break;
-                cached = m_cache.get(chunk_offset);
-                if (!cached) break;
+                if (!m_cache.read(chunk_offset, chunk_start, chunk_avail, ptr + total_read))
+                    break;
             }
 
-            // Copy from cache
-            u64 copy_size = std::min(chunk_avail, cached->size - chunk_start);
-            std::memcpy(ptr + total_read, cached->data.data() + chunk_start, copy_size);
-            total_read += copy_size;
+            total_read += chunk_avail;
 
             // Notify prefetch thread
             m_last_read_offset.store(offset + total_read);
@@ -448,12 +482,23 @@ namespace fs
 
     u64 http_file::seek(s64 offset, seek_mode whence)
     {
+        s64 base = 0;
         switch (whence)
         {
-        case seek_set: m_pos = offset; break;
-        case seek_cur: m_pos += offset; break;
-        case seek_end: m_pos = m_file_size + offset; break;
+        case seek_set: break; // relative to 0
+        case seek_cur: base = static_cast<s64>(std::min(m_pos, static_cast<u64>(std::numeric_limits<s64>::max()))); break;
+        case seek_end: base = static_cast<s64>(std::min(m_file_size, static_cast<u64>(std::numeric_limits<s64>::max()))); break;
         }
+
+        // Clamp to [0, m_file_size]: a negative or past-end seek would
+        // otherwise wrap the u64 position around.
+        s64 target = 0;
+        if (offset > 0 && base > std::numeric_limits<s64>::max() - offset)
+            target = std::numeric_limits<s64>::max();
+        else
+            target = base + offset;
+
+        m_pos = target < 0 ? 0 : std::min(static_cast<u64>(target), m_file_size);
         return m_pos;
     }
 
@@ -475,7 +520,9 @@ namespace fs
     {
         out_size = 0;
 
-        // Try a HEAD request first: the cheapest way to learn Content-Length.
+        // Try a HEAD request first for a cheap Content-Length. It is only a hint:
+        // Range support is still enforced by the probe below, whose
+        // Content-Range total is authoritative.
         {
             curl_handle ch;
             if (!ch.setup(url))
@@ -501,7 +548,6 @@ namespace fs
                 if (status >= 200 && status < 300 && headers.content_length > 0)
                 {
                     out_size = headers.content_length;
-                    return true;
                 }
             }
             else
@@ -511,10 +557,10 @@ namespace fs
             }
         }
 
-        // Some servers refuse HEAD (or return no Content-Length for it). Probe
-        // with a 1-byte ranged GET instead: the total size comes back in
-        // Content-Range: bytes 0-0/N. Range support is mandatory anyway, so
-        // this also doubles as the can-this-file-be-streamed check.
+        // The 1-byte ranged GET probe doubles as the can-this-file-be-
+        // streamed check: the total size comes back in
+        // Content-Range: bytes 0-0/N, and a server that does not honor the
+        // Range header answers 200 instead of 206 — reject it.
         curl_handle ch;
         if (!ch.setup(url))
             return false;
@@ -542,9 +588,9 @@ namespace fs
 
         long status = 0;
         curl_easy_getinfo(ch.get(), CURLINFO_RESPONSE_CODE, &status);
-        if (status != 200 && status != 206)
+        if (status != 206)
         {
-            fs_http.error("Probe GET %s: HTTP %ld", redact_url(url).c_str(), status);
+            fs_http.error("Probe GET %s: HTTP %ld (no Range support)", redact_url(url).c_str(), status);
             return false;
         }
 
@@ -611,17 +657,23 @@ namespace fs
 
     void init_http_device()
     {
-        static bool initialized = false;
-        if (initialized) return;
-        initialized = true;
+        // curl_global_init is documented as not thread-safe, so the one-time
+        // init is guarded by std::call_once; the enabled flag then guards the
+        // device registration (only after a successful init).
+        static std::once_flag once;
+        static bool enabled = false;
 
-        // curl_global_init is not thread-safe; the guarded first call runs
-        // before any discovered http_file exists, so no race in practice.
-        if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
-        {
-            fs_http.error("curl_global_init failed; HTTP file backend disabled");
+        std::call_once(once, [] {
+            if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+            {
+                fs_http.error("curl_global_init failed; HTTP file backend disabled");
+                return;
+            }
+            enabled = true;
+        });
+
+        if (!enabled)
             return;
-        }
 
         set_virtual_device("http_dev", stx::make_shared<http_device>());
         fs_http.success("HTTP file backend registered");

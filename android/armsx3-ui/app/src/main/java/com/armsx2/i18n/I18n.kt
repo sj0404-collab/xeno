@@ -616,6 +616,7 @@ val EN: Map<String, String> = mapOf(
     "cloud.working" to "Working\u2026",
     "cloud.pushed" to "Uploaded %d save(s).",
     "cloud.pulled" to "Downloaded %d save(s). On a fresh install, saves are pulled from the server's saves/ listing even when no local folders exist yet.",
+    "cloud.failed" to "Sync failed: %s",
     "cloud.games.title" to "Cloud games",
     "cloud.games.description" to "Download a disc image from games/ on your server, cache it, and boot it. Cached files are reused when the size matches. On a device with a cached copy, the game launches without a network.",
     "cloud.games.file" to "File in games/",

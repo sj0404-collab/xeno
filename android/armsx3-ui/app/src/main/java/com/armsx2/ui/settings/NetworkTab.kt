@@ -368,13 +368,19 @@ private fun CloudSection() {
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val cloudWorking = str("cloud.working")
+                val failedLabel = I18n.get("cloud.failed")
                 val push = {
                     if (!busy) scope.launch {
                         busy = true
                         status = cloudWorking
-                        val n = withContext(Dispatchers.IO) { com.armsx2.CloudSync.pushAllSaves() }
-                        status = I18n.get("cloud.pushed").format(n)
-                        busy = false
+                        try {
+                            val n = withContext(Dispatchers.IO) { com.armsx2.CloudSync.pushAllSaves() }
+                            status = I18n.get("cloud.pushed").format(n)
+                        } catch (e: Exception) {
+                            status = failedLabel.format(e.message ?: "")
+                        } finally {
+                            busy = false
+                        }
                     }
                 }
                 OutlinedButton(
@@ -386,9 +392,14 @@ private fun CloudSection() {
                     if (!busy) scope.launch {
                         busy = true
                         status = cloudWorking
-                        val n = withContext(Dispatchers.IO) { com.armsx2.CloudSync.pullAllSaves() }
-                        status = I18n.get("cloud.pulled").format(n)
-                        busy = false
+                        try {
+                            val n = withContext(Dispatchers.IO) { com.armsx2.CloudSync.pullAllSaves() }
+                            status = I18n.get("cloud.pulled").format(n)
+                        } catch (e: Exception) {
+                            status = failedLabel.format(e.message ?: "")
+                        } finally {
+                            busy = false
+                        }
                     }
                 }
                 OutlinedButton(
@@ -497,9 +508,14 @@ private fun GithubCloudSection() {
                 if (!busy) scope.launch {
                     busy = true
                     status = ghVerifyFailLabel
-                    val who = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.verify() }
-                    status = if (who != null) I18n.get("github.verify.ok").format(who) else ghVerifyFail
-                    busy = false
+                    try {
+                        val who = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.verify() }
+                        status = if (who != null) I18n.get("github.verify.ok").format(who) else ghVerifyFail
+                    } catch (e: Exception) {
+                        status = ghVerifyFailLabel
+                    } finally {
+                        busy = false
+                    }
                 }
             }
             OutlinedButton(
@@ -521,9 +537,14 @@ private fun GithubCloudSection() {
                     if (!busy) scope.launch {
                         busy = true
                         status = ghPushWorking
-                        val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pushAll() }
-                        status = if (n > 0) I18n.get("github.push.ok").format(n) else ghPushFail
-                        busy = false
+                        try {
+                            val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pushAll() }
+                            status = if (n > 0) I18n.get("github.push.ok").format(n) else ghPushFail
+                        } catch (e: Exception) {
+                            status = ghPushFail
+                        } finally {
+                            busy = false
+                        }
                     }
                 }
                 OutlinedButton(
@@ -535,9 +556,14 @@ private fun GithubCloudSection() {
                     if (!busy) scope.launch {
                         busy = true
                         status = ghPullWorking
-                        val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pullAll() }
-                        status = if (n > 0) I18n.get("github.pull.ok").format(n) else ghPullFail
-                        busy = false
+                        try {
+                            val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pullAll() }
+                            status = if (n > 0) I18n.get("github.pull.ok").format(n) else ghPullFail
+                        } catch (e: Exception) {
+                            status = ghPullFail
+                        } finally {
+                            busy = false
+                        }
                     }
                 }
                 OutlinedButton(
@@ -644,13 +670,18 @@ private fun CloudGameRow(busy: Boolean, setBusy: (Boolean) -> Unit) {
                 if (!busy) scope.launch {
                     setBusy(true)
                     status = dlWorking
-                    val local = withContext(Dispatchers.IO) { com.armsx2.CloudSync.downloadGame(name) }
-                    setBusy(false)
-                    if (local != null) {
-                        status = dlDone
-                        com.armsx2.runtime.MainActivityRuntime.launchGame(local)
-                    } else {
+                    try {
+                        val local = withContext(Dispatchers.IO) { com.armsx2.CloudSync.downloadGame(name) }
+                        if (local != null) {
+                            status = dlDone
+                            com.armsx2.runtime.MainActivityRuntime.launchGame(local)
+                        } else {
+                            status = dlFailed
+                        }
+                    } catch (e: Exception) {
                         status = dlFailed
+                    } finally {
+                        setBusy(false)
                     }
                 }
             }
@@ -661,13 +692,18 @@ private fun CloudGameRow(busy: Boolean, setBusy: (Boolean) -> Unit) {
                 if (!busy) scope.launch {
                     setBusy(true)
                     status = streamWorking
-                    val url = withContext(Dispatchers.IO) { com.armsx2.CloudSync.streamGameUrl(name) }
-                    setBusy(false)
-                    if (url != null) {
-                        status = streamDone
-                        com.armsx2.runtime.MainActivityRuntime.launchGame(url)
-                    } else {
+                    try {
+                        val url = withContext(Dispatchers.IO) { com.armsx2.CloudSync.streamGameUrl(name) }
+                        if (url != null) {
+                            status = streamDone
+                            com.armsx2.runtime.MainActivityRuntime.launchGame(url)
+                        } else {
+                            status = streamFailed
+                        }
+                    } catch (e: Exception) {
                         status = streamFailed
+                    } finally {
+                        setBusy(false)
                     }
                 }
             }
@@ -679,22 +715,26 @@ private fun CloudGameRow(busy: Boolean, setBusy: (Boolean) -> Unit) {
                 if (!busy) scope.launch {
                     setBusy(true)
                     status = installWorking
-                    val url = withContext(Dispatchers.IO) { com.armsx2.CloudSync.streamGameUrl(name) }
-                    if (url != null) {
-                        val id = ProgressRepository.create(context, installWorking)
-                        val ok = withContext(Dispatchers.IO) { RPCSX.instance.installPkgFromUrl(url, id) }
-                        setBusy(false)
-                        if (ok) {
-                            withContext(Dispatchers.IO) {
-                                com.armsx2.data.library.GameLibraryRepository(context).invalidateCache()
+                    try {
+                        val url = withContext(Dispatchers.IO) { com.armsx2.CloudSync.streamGameUrl(name) }
+                        if (url != null) {
+                            val id = ProgressRepository.create(context, installWorking)
+                            val ok = withContext(Dispatchers.IO) { RPCSX.instance.installPkgFromUrl(url, id) }
+                            if (ok) {
+                                withContext(Dispatchers.IO) {
+                                    com.armsx2.data.library.GameLibraryRepository(context).invalidateCache()
+                                }
+                                status = installDone
+                            } else {
+                                status = installFailed
                             }
-                            status = installDone
                         } else {
                             status = installFailed
                         }
-                    } else {
-                        setBusy(false)
+                    } catch (e: Exception) {
                         status = installFailed
+                    } finally {
+                        setBusy(false)
                     }
                 }
             }

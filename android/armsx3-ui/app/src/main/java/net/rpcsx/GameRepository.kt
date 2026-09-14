@@ -88,7 +88,11 @@ class GameRepository {
 
         private var needsRefresh = false
         val isRefreshing = mutableStateOf(false)
-        private var isRefreshInCooldown = false
+        // Guard for the refresh worker's lifetime flags. Several threads (library UI, package
+        // installs) can call queueRefresh(); without atomic spawn bookkeeping two workers scan
+        // at once and race the game list (double native scan + SnapshotStateList corruption).
+        private val refreshLock = Any()
+        private var workerAlive = false
 
         fun save() {
             try {
@@ -104,10 +108,16 @@ class GameRepository {
 
         suspend fun load() {
             withContext(Dispatchers.IO) {
+                // No games.json is the normal first-run state, not an error. Reading it
+                // blind threw FileNotFoundException and printStackTrace() put the whole
+                // trace in the diagnostic log, where it reads as a crash (same false
+                // alarm fw.json used to cause).
+                val file = File(RPCSX.rootDirectory + "games.json")
+                if (!file.isFile) return@withContext
                 try {
                     instance.games.clear()
                     instance.games += Json.decodeFromString<Array<GameInfo>>(
-                        File(RPCSX.rootDirectory + "games.json").readText()
+                        file.readText()
                     ).map { info -> Game(toStore(info)) }
                 } catch (_: NotFoundException) {
                 } catch (e: Exception) {
@@ -117,20 +127,36 @@ class GameRepository {
         }
 
         fun queueRefresh() {
-            needsRefresh = true
-            if (!isRefreshing.value || isRefreshInCooldown) {
-                thread {
-                    isRefreshing.value = true
-                    do {
-                        needsRefresh = false
+            synchronized(refreshLock) {
+                needsRefresh = true
+                if (workerAlive) return
+                workerAlive = true
+            }
+            thread {
+                try {
+                    // One worker owns the whole scan lifecycle. Requests made while
+                    // scanning OR during the cooldown sleep are honoured by the same
+                    // worker, so isRefreshing is only ever cleared by the worker that
+                    // owns the scan.
+                    while (true) {
+                        val requested = synchronized(refreshLock) {
+                            val go = needsRefresh
+                            needsRefresh = false
+                            go
+                        }
+                        if (!requested) break
+                        isRefreshing.value = true
                         refresh()
-                    } while (needsRefresh)
-                    isRefreshInCooldown = true
-                    Thread.sleep(300)
-                    if (!needsRefresh) {
-                        isRefreshInCooldown = false
                         isRefreshing.value = false
+                        // Coalesce a burst of requests into a short queue.
+                        try { Thread.sleep(300) } catch (_: InterruptedException) {}
                     }
+                } finally {
+                    synchronized(refreshLock) {
+                        workerAlive = false
+                        needsRefresh = false
+                    }
+                    isRefreshing.value = false
                 }
             }
         }
