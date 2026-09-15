@@ -445,6 +445,18 @@ private fun GithubCloudSection() {
 
     val configured = token.trim().isNotBlank()
 
+    // str() is @Composable — it may NOT be called from the coroutine lambdas below
+    // (they run in a non-composable CoroutineScope). Read the labels once here in
+    // composable scope for all buttons (save/verify/push/pull); this mirrors the
+    // cloud section (hoisted `disabledLabel`/`savedLabel`).
+    val ghDisabledLabel = str("github.disabled")
+    val ghReadyLabel = str("github.ready")
+    val ghVerifyFailLabel = str("github.verify.fail")
+    val ghPushWorkingLabel = str("github.push.working")
+    val ghPushFailLabel = str("github.push.fail")
+    val ghPullWorkingLabel = str("github.pull.working")
+    val ghPullFailLabel = str("github.pull.fail")
+
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingsDivider()
         Spacer(Modifier.height(10.dp))
@@ -483,22 +495,11 @@ private fun GithubCloudSection() {
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // str() is @Composable — it may NOT be called from the coroutine lambdas below
-            // (they run in a non-composable CoroutineScope). Read the labels once here in
-            // composable scope for both save and the push/pull rows that follow; this mirrors
-            // the cloud section (hoisted `disabledLabel`/`savedLabel`).
-            val ghDisabledLabel = str("github.disabled")
-            val ghReadyLabel = str("github.ready")
-            val ghVerifyFailLabel = str("github.verify.fail")
-            val ghPushWorkingLabel = str("github.push.working")
-            val ghPushFailLabel = str("github.push.fail")
-            val ghPullWorkingLabel = str("github.pull.working")
-            val ghPullFailLabel = str("github.pull.fail")
             val save = {
                 com.armsx2.GithubSaveSync.save(token.trim().takeIf { it.isNotBlank() }, repo)
                 if (com.armsx2.GithubSaveSync.token == null) token = ""
                 repo = com.armsx2.GithubSaveSync.repo
-                status = if (com.armsx2.GithubSaveSync.token == null) ghDisabled else ghReady
+                status = if (com.armsx2.GithubSaveSync.token == null) ghDisabledLabel else ghReadyLabel
             }
             OutlinedButton(
                 onClick = save,
@@ -510,7 +511,7 @@ private fun GithubCloudSection() {
                     status = ghVerifyFailLabel
                     try {
                         val who = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.verify() }
-                        status = if (who != null) I18n.get("github.verify.ok").format(who) else ghVerifyFail
+                        status = if (who != null) I18n.get("github.verify.ok").format(who) else ghVerifyFailLabel
                     } catch (e: Exception) {
                         status = ghVerifyFailLabel
                     } finally {
@@ -536,12 +537,12 @@ private fun GithubCloudSection() {
                 val push = {
                     if (!busy) scope.launch {
                         busy = true
-                        status = ghPushWorking
+                        status = ghPushWorkingLabel
                         try {
                             val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pushAll() }
-                            status = if (n > 0) I18n.get("github.push.ok").format(n) else ghPushFail
+                            status = if (n > 0) I18n.get("github.push.ok").format(n) else ghPushFailLabel
                         } catch (e: Exception) {
-                            status = ghPushFail
+                            status = ghPushFailLabel
                         } finally {
                             busy = false
                         }
@@ -555,12 +556,12 @@ private fun GithubCloudSection() {
                 val pull = {
                     if (!busy) scope.launch {
                         busy = true
-                        status = ghPullWorking
+                        status = ghPullWorkingLabel
                         try {
                             val n = withContext(Dispatchers.IO) { com.armsx2.GithubSaveSync.pullAll() }
-                            status = if (n > 0) I18n.get("github.pull.ok").format(n) else ghPullFail
+                            status = if (n > 0) I18n.get("github.pull.ok").format(n) else ghPullFailLabel
                         } catch (e: Exception) {
-                            status = ghPullFail
+                            status = ghPullFailLabel
                         } finally {
                             busy = false
                         }

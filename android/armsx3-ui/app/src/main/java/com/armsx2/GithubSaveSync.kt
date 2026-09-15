@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -115,7 +116,7 @@ object GithubSaveSync {
         val root = SaveDataImporter.savedataRoot() ?: return@withContext 0
         var pushed = 0
         try {
-            kotlinx.coroutines.sync.withLock(com.armsx2.CloudSync.syncMutex) {
+            com.armsx2.CloudSync.syncMutex.withLock {
                 val (owner, repoName, branch) = ensureRepo(t)
                 root.listFiles().orEmpty()
                     .filter { it.isDirectory && !it.name.startsWith(".") }
@@ -153,7 +154,7 @@ object GithubSaveSync {
         val dest = SaveDataImporter.savedataRoot() ?: return@withContext 0
         var pulled = 0
         try {
-            kotlinx.coroutines.sync.withLock(com.armsx2.CloudSync.syncMutex) {
+            com.armsx2.CloudSync.syncMutex.withLock {
                 val (owner, repoName, branch) = ensureRepo(t)
                 val entries = listContents(owner, repoName, branch, "saves")
                 entries.forEach { item ->

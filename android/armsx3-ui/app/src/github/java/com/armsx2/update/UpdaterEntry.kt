@@ -221,6 +221,7 @@ fun AutoUpdateGate() {
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     val checkFailedPrefix = str("update.checkFailed")
+    val downloadFailedPrefix = str("update.downloadFailed")
 
     LaunchedEffect(Unit) {
         if (MainActivityRuntime.prefs.getBoolean("update.checkOnLaunch", false)) {
