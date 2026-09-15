@@ -48,6 +48,9 @@ data class OnboardingUiState(
     val gameFolders: List<String> = emptyList(),
     val busy: Boolean = false,
     val error: String? = null,
+    // Winlator-style emulator core: not shipped in the APK, fetched from GitHub.
+    val coreReady: Boolean = false,
+    val coreDownloading: Boolean = false,
 )
 
 enum class StorageLocation { Internal, SdCard, Custom }
@@ -98,6 +101,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 ?: if (MainActivityRuntime.setupComplete.value) 1 else 0,
             firmwareVersion = FirmwareRepository.version.value,
             firmwareInstalled = FirmwareRepository.status.value != FirmwareStatus.None,
+            // Winlator-style: the core is a separate download from the GitHub
+            // release. If it is already on disk from a previous run, show
+            // "ready" instead of the download prompt.
+            coreReady = RPCSX.initialized || net.rpcsx.CoreRepository.isInstalled(getApplication()),
         )
     }
 
@@ -168,9 +175,18 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
             runCatching { NativeApp.initializeOnce(getApplication()) }
         }
         if (!RPCSX.initialized) {
+            // Winlator-style: the core is a separate download. If it has not
+            // been fetched yet, tell the user where to get it rather than
+            // suggesting a reinstall that will not help.
+            val corePresent = net.rpcsx.CoreRepository.isInstalled(getApplication())
             state.value = state.value.copy(
-                error = "The emulator core did not load, so firmware cannot be " +
-                    "installed. Reinstall ARMSX3 and try again.",
+                error = if (corePresent) {
+                    "The emulator core did not load, so firmware cannot be " +
+                        "installed. Reinstall ARMSX3 and try again."
+                } else {
+                    "The emulator core is not installed yet. " +
+                        "Download it with the button above, then install the firmware."
+                },
             )
             return
         }
@@ -433,6 +449,37 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     fun dismissError() {
         state.value = state.value.copy(error = null)
+    }
+
+    /**
+     * Winlator-style core fetch: download libarmsx3-core.so from the latest GitHub
+     * release into the app's private dir, then bring the emulator up against it.
+     * The download streams off the main thread; progress surfaces through
+     * [net.rpcsx.CoreRepository.progressRead]/[progressTotal] (Compose-aware).
+     */
+    fun downloadCore() {
+        if (state.value.busy || state.value.coreDownloading) return
+        state.value = state.value.copy(
+            coreDownloading = true,
+            coreReady = false,
+            error = null,
+        )
+
+        viewModelScope.launch {
+            val ok = net.rpcsx.CoreRepository.download(getApplication())
+            var ready = ok
+            if (ok) {
+                // Force the glue to pick up the freshly written .so and initialise.
+                runCatching { NativeApp.initializeOnce(getApplication()) }
+                ready = RPCSX.initialized
+            }
+            val fail = net.rpcsx.CoreRepository.error.value
+            state.value = state.value.copy(
+                coreDownloading = false,
+                coreReady = ready,
+                error = if (ready) null else fail?.let { it } ?: "Core download failed.",
+            )
+        }
     }
 
     private fun probeFile(file: File): BiosInfo? = runCatching {

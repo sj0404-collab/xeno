@@ -230,8 +230,13 @@ jobs:
           else
             gh release create "${{ github.ref_name }}" \
               --title "XENO ${{ github.ref_name }}" \
-              --notes "ARMS3 APK (arm64-v8a), Docker build - run ${{ github.run_id }}" \
-              ${{ github.workspace }}/out/*.apk
+              --notes "ARMS3 APK (arm64-v8a), Docker build - run ${{ github.run_id }}
+
+The emulator core (libarmsx3-core.so) is released as a separate asset: the
+app downloads it into private storage on first setup (Winlator-style), which
+is how the APK stays ~60 MB smaller. Do not rename the asset." \
+              ${{ github.workspace }}/out/*.apk \
+              ${{ github.workspace }}/android/armsx3-ui/app/src/main/jniLibs/arm64-v8a/libarmsx3-core.so
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

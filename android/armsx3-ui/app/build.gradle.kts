@@ -34,8 +34,8 @@ android {
         // agree -- an APK that installs below its core's target is a dlopen failure at boot.
         minSdk = (project.findProperty("armsx3.minSdk") as String?)?.toInt() ?: 33
         targetSdk = 37
-        versionCode = 64
-        versionName = "0.9.11"
+        versionCode = 65
+        versionName = "0.9.12"
 
         // ARMSX2's UI reads these. STORAGE_ALL_FILES gates the all-files storage path in
         // onboarding; IN_APP_UPDATER gates the in-app GitHub-release updater.
@@ -209,6 +209,11 @@ android {
         val extractNativeLibs =
             (project.findProperty("armsx3.extractNativeLibs") as String?) == "true"
         jniLibs.useLegacyPackaging = extractNativeLibs
+        // Winlator-style: the emulator core is NOT shipped in the APK (keeps it
+        // ~60 MB smaller). It is staged by build-variants.sh only so the release
+        // workflow can attach it as a standalone release asset, and the app
+        // downloads it into private storage on first run. See CoreRepository.
+        jniLibs.excludes += "lib/arm64-v8a/libarmsx3-core.so"
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

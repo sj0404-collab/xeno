@@ -269,8 +269,16 @@ jobs:
             | Сборка | [run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
             | APK | `${{ env.APK_NAME }}` |
 
+            ### Emulator core
+
+            `libarmsx3-core.so` is released separately from the APK: the app
+            downloads it into private storage on first setup (Winlator-style),
+            which is how the APK stays ~60 MB smaller. Do not rename the asset.
+
             Установка требует PS3-прошивку (не включена).
-          files: /tmp/xeno-apk/*.apk
+          files: |
+            /tmp/xeno-apk/*.apk
+            android/armsx3-ui/app/src/main/jniLibs/arm64-v8a/libarmsx3-core.so
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}

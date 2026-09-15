@@ -120,9 +120,19 @@ object Rpcs3Bridge {
                 return
             }
 
-            val core = File(libDir, "libarmsx3-core.so")
-            if (!core.exists()) {
-                android.util.Log.e("ARMSX3", "core missing at ${'$'}{core.absolutePath}")
+            // The APK no longer ships libarmsx3-core.so (Winlator-style: smaller
+            // APK, core fetched from GitHub). Check the nativeLibraryDir first for
+            // a still-bundled APK, then the private dir where CoreRepository stores
+            // the downloaded file.
+            val nativeCore = File(libDir, "libarmsx3-core.so")
+            val downloadedCore = net.rpcsx.CoreRepository.coreFile(context)
+            val core: File? = when {
+                nativeCore.isFile && nativeCore.length() > 0L -> nativeCore
+                downloadedCore.isFile && downloadedCore.length() > 0L -> downloadedCore
+                else -> null
+            }
+            if (core == null) {
+                android.util.Log.e("ARMSX3", "core missing: checked ${'$'}{nativeCore.absolutePath} and ${'$'}{downloadedCore.absolutePath}")
                 return
             }
             if (!RPCSX.openLibrary(core.absolutePath)) {

@@ -295,7 +295,12 @@ private fun WizardPage(
     when (page) {
         0 -> WelcomePage(compact = true)
         1 -> StoragePage(state, compact = true, viewModel::selectStorage, onCustomStorage)
-        2 -> FirmwarePage(state, onPick = biosPicker, onInstall = viewModel::installFirmware)
+        2 -> FirmwarePage(
+            state,
+            onPick = biosPicker,
+            onInstall = viewModel::installFirmware,
+            onDownloadCore = viewModel::downloadCore,
+        )
         3 -> GamesPage(state, folderPicker, viewModel::removeGameFolder)
         else -> ReadyPage(state, compact = true)
     }
@@ -503,6 +508,7 @@ private fun FirmwarePage(
     state: OnboardingUiState,
     onPick: () -> Unit,
     onInstall: (FirmwareCandidate) -> Unit,
+    onDownloadCore: () -> Unit,
 ) {
     SetupPage(str("setup.page.bios.title"), str("setup.step.bios.description")) {
         when {
@@ -527,6 +533,61 @@ private fun FirmwarePage(
                         OutlinedButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
                             Text(str("setup.button.pickDifferentFolder"))
                         }
+                    }
+                }
+            }
+
+            // Winlator-style: the emulator core itself must be downloaded from the
+            // GitHub release before any firmware can be installed.
+            !state.coreReady && state.coreDownloading -> {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    val progress = net.rpcsx.CoreRepository.progressRead.value
+                    val total = net.rpcsx.CoreRepository.progressTotal.value
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            progress = { if (total > 0) (progress.toFloat() / total).coerceIn(0f, 1f) else 0f },
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                str("setup.core.downloading"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (total > 0) {
+                                Text(
+                                    "%.1f / %.1f MB".format(progress / 1_048_576f, total / 1_048_576f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            !state.coreReady -> {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
+                    ChoiceCard(
+                        title = str("setup.core.notInstalled"),
+                        detail = str("setup.core.desc"),
+                        glyph = "\u25C9",
+                        selected = false,
+                        onClick = onDownloadCore,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    val coreError = net.rpcsx.CoreRepository.error.value
+                    if (coreError != null) {
+                        Text(
+                            coreError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    OutlinedButton(onClick = onDownloadCore, modifier = Modifier.fillMaxWidth()) {
+                        Text(str("setup.core.download"))
                     }
                 }
             }
