@@ -1,9 +1,12 @@
 name: Release ARM64 APK
 
 on:
+  # Releases are created by the Docker workflow (docker-arm64-apk.yml), which is
+  # reliable on PR runs; this Windows flow only keeps producing a diagnostic
+  # artifact from master pushes, so it must not fire on tags.
   push:
-    tags:
-      - "0.*"
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       variant:
