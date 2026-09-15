@@ -545,9 +545,9 @@ private fun FirmwarePage(
                     val total = net.rpcsx.CoreRepository.progressTotal.value
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(
+                            progress = { if (total > 0) (progress.toFloat() / total).coerceIn(0f, 1f) else 0f },
                             Modifier.size(24.dp),
                             strokeWidth = 2.dp,
-                            progress = { if (total > 0) (progress.toFloat() / total).coerceIn(0f, 1f) else 0f },
                         )
                         Spacer(Modifier.width(12.dp))
                         Column {
