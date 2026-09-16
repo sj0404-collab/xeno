@@ -37,6 +37,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ARMSX2"
+rootProject.name = "xeno-ui"
 include(":app")
  

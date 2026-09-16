@@ -1,4 +1,4 @@
-# ARMSX3 R8 / ProGuard rules.
+# XENO R8 / ProGuard rules.
 #
 # ---------------------------------------------------------------------------
 # JNI callback surface -- DO NOT REMOVE
@@ -75,8 +75,8 @@
 #
 # Both halves are resolved by NAME from native code, so R8 must not touch them:
 #
-#  * DiscordNative -- our own JNI. The C symbols are literally
-#    Java_com_armsx2_discord_DiscordNative_*, so renaming the class or its
+# *  DiscordNative -- our own JNI. The C symbols are literally
+#    Java_com_xeno_discord_DiscordNative_*, so renaming the class or its
 #    methods breaks the lookup.
 #  * com.discord.** -- the SDK's native code FindClass()es its own Java types.
 #    Without this the :discord process aborts with
@@ -85,6 +85,6 @@
 #
 # Same failure mode as the net/rpcsx keeps above: invisible in debug (no R8),
 # fatal in release.
--keep class com.armsx2.discord.DiscordNative { *; }
+-keep class com.xeno.discord.DiscordNative { *; }
 -keep class com.discord.** { *; }
 -keepclassmembers class com.discord.** { *; }

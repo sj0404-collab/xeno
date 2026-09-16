@@ -300,12 +300,12 @@ class RPCSX {
         init {
             // This loads the JNI GLUE (app/src/main/cpp/native-lib.cpp), not the
             // emulator core. The glue is what implements every external fun here;
-            // it then dlopen()s libarmsx3-core.so by path via openLibrary(), and
+            // it then dlopen()s libxeno-core.so by path via openLibrary(), and
             // forwards each call to the core's _rpcsx_* entry points.
             //
             // Two libraries, two load steps -- loading the core here instead
             // would resolve nothing, because the core exports no JNI symbols.
-            System.loadLibrary("armsx3-jni")
+            System.loadLibrary("xeno-jni")
         }
     }
 }

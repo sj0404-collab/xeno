@@ -6,13 +6,13 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// ARMSX3 UI module.
+// XENO UI module.
 //
-// ARMSX2's Compose UI running on the RPCS3 core. Deliberately much simpler than
-// ARMSX2's own build file, which is replaced wholesale rather than edited:
+// XENO's Compose UI running on the RPCS3 core. Deliberately much simpler than
+// XENO's own build file, which is replaced wholesale rather than edited:
 //
 //  * externalNativeBuild builds ONLY the JNI glue (src/main/cpp), which is small.
-//    The emulator CORE is a prebuilt libarmsx3-core.so (upstream RPCS3 via
+//    The emulator CORE is a prebuilt libxeno-core.so (upstream RPCS3 via
 //    android/configure.sh) that the glue dlopen()s at runtime -- building that
 //    from Gradle would drag LLVM into every sync.
 //  * NO Discord SDK staging. That path requires DISCORD_SDK_DIR pointed at a
@@ -20,24 +20,24 @@ plugins {
 //    the critical path for standing the UI up.
 //  * NO product flavors, no PGO, no dual page-size cores - all PCSX2-specific.
 //
-// The source package stays com.armsx2 on purpose: renaming 129 files buys
-// nothing and risks silent breakage. applicationId is what identifies the app.
+    // The source package is com.xeno (rebranded from com.armsx2/com.armsx3).
+    // applicationId is what identifies the app.
 
 android {
-    namespace = "com.armsx2"
+    namespace = "com.xeno"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.armsx3"
+        applicationId = "com.xeno.emulator"
         // Set per variant by android/build-variants.sh: 33 for the A13 build (NDK 28), 35 for
         // the A15 build (NDK 29). The core is compiled against the matching API, so these must
         // agree -- an APK that installs below its core's target is a dlopen failure at boot.
-        minSdk = (project.findProperty("armsx3.minSdk") as String?)?.toInt() ?: 33
+        minSdk = (project.findProperty("xeno.minSdk") as String?)?.toInt() ?: 33
         targetSdk = 37
-        versionCode = 65
-        versionName = "0.9.12"
+        versionCode = 100
+        versionName = "1.0.0-mali"
 
-        // ARMSX2's UI reads these. STORAGE_ALL_FILES gates the all-files storage path in
+        // XENO's UI reads these. STORAGE_ALL_FILES gates the all-files storage path in
         // onboarding; IN_APP_UPDATER gates the in-app GitHub-release updater.
         //
         // These are the github values; the play flavor overrides all three below.
@@ -55,7 +55,7 @@ android {
             abiFilters.add("arm64-v8a")
         }
 
-        // Builds the JNI glue (libarmsx3-jni.so) only. The emulator core is NOT
+        // Builds the JNI glue (libxeno-jni.so) only. The emulator core is NOT
         // built here -- it is a prebuilt in jniLibs, produced separately by
         // android/configure.sh + ninja, because it needs LLVM and a ~40 minute
         // build that has no business running on every Gradle sync.
@@ -89,7 +89,7 @@ android {
 
         create("play") {
             dimension = "distribution"
-            applicationId = "com.armsx3.play"
+            applicationId = "com.xeno.emulator.play"
 
             buildConfigField("boolean", "STORAGE_ALL_FILES", "false")
             buildConfigField("boolean", "IN_APP_UPDATER", "false")
@@ -97,7 +97,7 @@ android {
 
             // Frame generation is excluded by SOURCE SET, not by a packaging filter: a
             // packaging block inside a flavor is not honoured and silently applied to both,
-            // which dropped the library from the github build too. libarmsx3_lsfg.so lives in
+            // which dropped the library from the github build too. libxeno_lsfg.so lives in
             // src/github/jniLibs, so only that flavor bundles it.
             //
             // Excluding the file is the whole exclusion. The shim is dlopen'd by name, and the
@@ -145,13 +145,13 @@ android {
             // per-class archive, while packageBundle still demands a plain mapping.txt, so an
             // AAB cannot be built with R8 enabled at all. Set by build-play-aab.sh.
             //
-            // The cost is small and there is precedent: ARMSX2 ships its Play build with minify
+            // The cost is small and there is precedent: XENO ships its Play build with minify
             // off entirely, and here a 94 MB native core dominates a 76 MB APK, so shrinking the
             // Kotlin saves comparatively little.
             //
-            // A gradle property rather than the variant API, matching how armsx3.minSdk is
+            // A gradle property rather than the variant API, matching how xeno.minSdk is
             // already threaded through by build-variants.sh.
-            val noMinify = project.hasProperty("armsx3.noMinify")
+            val noMinify = project.hasProperty("xeno.noMinify")
             isMinifyEnabled = !noMinify
             isShrinkResources = !noMinify
             proguardFiles(
@@ -174,9 +174,9 @@ android {
             // cannot install, and the error Android shows says nothing about signatures. It was
             // being worked around by hiding keystore.properties by hand before each build, which
             // is exactly the kind of step that gets forgotten once.
-            signingConfig = if (project.hasProperty("armsx3.uploadSigning")) {
+            signingConfig = if (project.hasProperty("xeno.uploadSigning")) {
                 signingConfigs.findByName("upload")
-                    ?: throw GradleException("armsx3.uploadSigning set but keystore.properties is missing")
+                    ?: throw GradleException("xeno.uploadSigning set but keystore.properties is missing")
             } else {
                 signingConfigs.getByName("debug")
             }
@@ -198,31 +198,31 @@ android {
     }
 
     packaging {
-        // Compress libarmsx3-core.so inside the APK (~40% smaller APK).
+        // Compress libxeno-core.so inside the APK (~40% smaller APK).
         //
         // libadrenotools is statically linked into the JNI glue, so it is not
         // affected by this flag; the one on-device behaviour that can change is
         // the custom-Vulkan-driver path (adrenotools_open_libvulkan). If a
         // driver pack ever stops loading on a device, flip
-        // `-Parmsx3.extractNativeLibs=true` and ship the extracted layout
+        // `-Pxeno.extractNativeLibs=true` and ship the extracted layout
         // again -- correctness always wins over bytes.
         val extractNativeLibs =
-            (project.findProperty("armsx3.extractNativeLibs") as String?) == "true"
+            (project.findProperty("xeno.extractNativeLibs") as String?) == "true"
         jniLibs.useLegacyPackaging = extractNativeLibs
         // Winlator-style: the emulator core is NOT shipped in the APK (keeps it
         // ~60 MB smaller). It is staged by build-variants.sh only so the release
         // workflow can attach it as a standalone release asset, and the app
         // downloads it into private storage on first run. See CoreRepository.
-        jniLibs.excludes += "lib/arm64-v8a/libarmsx3-core.so"
+        jniLibs.excludes += "lib/arm64-v8a/libxeno-core.so"
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }
 
-// ARMSX3: fail the build if the bundled ANGLE libraries are not there.
+// XENO: fail the build if the bundled ANGLE libraries are not there.
 //
-// This check exists because of a specific, expensive bug in ARMSX2: the repo's
+// This check exists because of a specific, expensive bug in XENO: the repo's
 // blanket `*.so` gitignore rule swallowed the ANGLE prebuilts, they never made it
 // into release staging, the APK shipped without them, and the core fell back to
 // the system GLES driver in complete silence. Users reported "ANGLE is broken"
@@ -238,7 +238,7 @@ android {
 //
 // The claim being guarded is live in THIS module: RendererBackendSection ->
 // AngleDriverSection writes Settings.useAngleOpenGL, and applyAngleEnv turns it
-// into ARMSX2_ANGLE_EGL_LIBRARY. (Both the libraries and this task used to sit in
+// into XENO_ANGLE_EGL_LIBRARY. (Both the libraries and this task used to sit in
 // the stale android/armsx3-app module, which builds nothing that ships -- so the
 // guard could not fire for the APK it was meant to protect.)
 val verifyAngleLibs by tasks.registering {

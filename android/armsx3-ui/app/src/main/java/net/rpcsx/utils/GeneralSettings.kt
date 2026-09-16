@@ -13,7 +13,7 @@ object GeneralSettings {
     }
 
     /**
-     * The backing store, for code ported from ARMSX2 that speaks plain
+     * The backing store, for code ported from XENO that speaks plain
      * SharedPreferences (MenuSfx, LibraryMusic, PauseMusic, skin/shader repos).
      * Same "app_prefs" file as the typed accessors above, so the two views
      * never diverge. Prefer the typed get/setValue API in new code.

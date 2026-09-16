@@ -1,6 +1,6 @@
 package net.rpcsx
 
-import com.armsx2.R
+import com.xeno.R
 import android.content.Context
 import android.os.Bundle
 import android.os.Handler
@@ -93,7 +93,7 @@ class ProgressRepository {
 
             val builder = NotificationCompat.Builder(context, "rpcsx-progress").apply {
                 setContentTitle(title)
-                setSmallIcon(R.drawable.ic_armsx3_notification)
+                setSmallIcon(R.drawable.ic_xeno_notification)
                 setCategory(NotificationCompat.CATEGORY_SERVICE)
                 setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 setProgress(0, 0, true)

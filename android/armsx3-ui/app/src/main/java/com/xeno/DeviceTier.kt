@@ -1,0 +1,152 @@
+package com.xeno
+
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+
+/**
+ * Best-effort device-capability probe used to seed low-end-friendly defaults
+ * and presets. Every reader is defensive: any probe that throws or returns a
+ * junk value falls back to a conservative assumption (NOT low-end) so we never
+ * hobble a capable device on a bad read.
+ *
+ * The tier is only ever a *hint* — it seeds first-run wizard defaults and the
+ * one-tap "Low-End" preset. Users can always override in Settings, so a false
+ * negative just means "no auto-help offered", never a hard cap.
+ */
+object DeviceTier {
+    /** CPU core count reported by the runtime. Clamped to a sane 1..64 range;
+     *  a bad read falls back to 8 (assume a capable device). */
+    fun coreCount(): Int = try {
+        Runtime.getRuntime().availableProcessors().coerceIn(1, 64)
+    } catch (_: Throwable) {
+        8
+    }
+
+    /** MTVU (multi-threaded VU1) is a win only when there are spare cores to run
+     *  VU1 on its own thread. On 4-core / big.LITTLE budget SoCs it can cost more
+     *  than it saves (EE<->VU1 sync + thread hop), so we gate the *default* on a
+     *  6-core minimum. This does NOT change the persisted Settings default (which
+     *  would bleed into existing users' saved configs) — it's applied only in
+     *  first-run wizard defaults and the Low-End preset. */
+    fun mtvuDefault(): Boolean = coreCount() >= 6
+
+    /** Total physical RAM in bytes, or Long.MAX_VALUE if it can't be read (so a
+     *  bad read never trips the low-RAM branch). */
+    private fun totalMemBytes(context: Context): Long = try {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        if (am != null) {
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            mi.totalMem
+        } else Long.MAX_VALUE
+    } catch (_: Throwable) {
+        Long.MAX_VALUE
+    }
+
+    private fun isLowRam(context: Context): Boolean = try {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        am?.isLowRamDevice ?: false
+    } catch (_: Throwable) {
+        false
+    }
+
+    /**
+     * Heuristic: a device is "low-end" for PS3 emulation when ANY of:
+     *   - the OS flags it as a low-RAM device (isLowRamDevice), OR
+     *   - it has fewer than 6 CPU cores (no headroom for MTVU + GS thread), OR
+     *   - it has under ~4 GB total RAM, OR
+     *   - the Mali GPU (if present) is rated LOW tier.
+     *
+     * Deliberately OR-ed and lenient: on any probe failure the individual
+     * checks default to "not low-end", so we only flag a device we're fairly
+     * sure is weak. Callers use this to *recommend* (never force) the Low-End
+     * preset / Fast profile in the setup wizard.
+     */
+    fun isLowEnd(context: Context): Boolean = try {
+        val lowRam = isLowRam(context)
+        val fewCores = coreCount() < 6
+        // ~4 GB with a little slack for reserved/kernel memory (report ~3.7 GB
+        // on a nominal 4 GB device), so genuine 4 GB devices aren't flagged.
+        val lowMem = totalMemBytes(context) < 3_600_000_000L
+        val maliLow = MaliGpuInfo.profile()?.tier == MaliGpuInfo.Tier.LOW
+        lowRam || fewCores || lowMem || maliLow
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Mali GPU profile, or null if the GPU is not Mali / not detectable. */
+    fun maliGpuProfile(): MaliGpuInfo.MaliGpuProfile? = MaliGpuInfo.profile()
+
+    /** Human-readable SoC/hardware id for logging/diagnostics. Uses
+     *  Build.SOC_MODEL on API 31+, else Build.HARDWARE. */
+    fun socModel(): String = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            Build.SOC_MODEL ?: Build.HARDWARE ?: "unknown"
+        else
+            Build.HARDWARE ?: "unknown"
+    } catch (_: Throwable) {
+        "unknown"
+    }
+
+    /** Known annotations for exact SoC model strings. Exact matches only —
+     *  equivalences are never guessed from CPU topology.
+     *
+     *  CQ8725S is the Qualcomm Dragonwing Q8 part in the AYN Odin 3, confirmed
+     *  from the device itself (ro.soc.model=CQ8725S, reporting 8 Oryon cores and
+     *  an Adreno 830). "-class" is deliberate: it is 8 Elite-family silicon, not
+     *  a claim that the part is identical to the phone SKU.
+     *
+     *  MediaTek Dimensity entries are included because those SoCs ship with
+     *  Mali GPUs (G-series), and knowing the SoC name helps users match
+     *  performance data from device-review sites. */
+    private val socAnnotations = mapOf(
+        // Qualcomm
+        "QCS8550" to "Snapdragon 8 Gen 2-class",
+        "QCS9075" to "Snapdragon 8 Elite-class",
+        "CQ8725S" to "Snapdragon 8 Elite-class",
+        // MediaTek Dimensity (Mali GPU)
+        "MT6893" to "Dimensity 1200",
+        "MT6895" to "Dimensity 8100",
+        "MT6897" to "Dimensity 7200",
+        "MT6983" to "Dimensity 9200",
+        "MT6985" to "Dimensity 9300",
+        "MT6989" to "Dimensity 9400",
+    )
+
+    /** Android reports missing Build fields as the literal [Build.UNKNOWN]
+     *  ("unknown") rather than null, so that value counts as "not reported" —
+     *  otherwise diagnostics read "unknown unknown" instead of falling back to
+     *  Build.HARDWARE. */
+    private fun String?.orNotReported(): String? =
+        this?.takeIf { it.isNotBlank() && !it.equals(Build.UNKNOWN, ignoreCase = true) }
+
+    /**
+     * Pure, JVM-testable formatter for the device's SoC identity, e.g.
+     * "Qualcomm QCS8550 (Snapdragon 8 Gen 2-class)".
+     *
+     * The model is what identifies the SoC, so a manufacturer on its own is not
+     * an identity: without a model this falls back to [hardware], the platform
+     * codename, which at least names the silicon. Model strings without a known
+     * annotation are preserved unchanged. Returns "" when nothing is reported.
+     */
+    fun formatSocIdentity(manufacturer: String?, model: String?, hardware: String?): String {
+        val socModel = model.orNotReported()
+            ?: return hardware.orNotReported() ?: ""
+
+        val base = listOfNotNull(manufacturer.orNotReported(), socModel).joinToString(" ")
+        val annotation = socAnnotations[socModel]
+        return if (annotation != null) "$base ($annotation)" else base
+    }
+
+    /** SoC identity from Android's public fields: Build.SOC_MANUFACTURER /
+     *  Build.SOC_MODEL on API 31+, Build.HARDWARE before that. */
+    fun socIdentity(): String = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            formatSocIdentity(Build.SOC_MANUFACTURER, Build.SOC_MODEL, Build.HARDWARE)
+        else
+            formatSocIdentity(null, null, Build.HARDWARE)
+    } catch (_: Throwable) {
+        ""
+    }
+}

@@ -16,7 +16,7 @@
         android:maxSdkVersion="28"
         tools:ignore="ScopedStorage" />
 
-    <!-- All-files access, so ARMSX3 can browse storage IN-APP (firmware, games)
+    <!-- All-files access, so XENO can browse storage IN-APP (firmware, games)
          instead of handing the user off to the system document picker.
 
          This was missing: the onboarding code already requested it and read
@@ -57,7 +57,7 @@
     <!-- The SDK's voice foreground service goes with them; we never start a call. -->
 
     <application
-        android:name=".Pasx2Application"
+        android:name=".XenoApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -69,7 +69,7 @@
         android:supportsRtl="true"
         android:isGame="true"
         android:appCategory="game"
-        android:theme="@style/Theme.ARMSX2"
+        android:theme="@style/Theme.XENO"
         android:allowNativeHeapPointerTagging="false"
         tools:targetApi="31"
         >
@@ -91,7 +91,7 @@
             android:hardwareAccelerated="true"
             android:exported="true"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.ARMSX2.Boot">
+            android:theme="@style/Theme.XENO.Boot">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -148,13 +148,13 @@
             Discord Social SDK's OAuth landing activity. Declared here rather than inherited from
             the vendor .aar on purpose: that .aar's manifest also declares RECORD_AUDIO, three
             foreground-service permissions and Bluetooth for its voice features, and the merger
-            would fold every one of them into ARMSX2 — the Play listing would show "Microphone" and
+            would fold every one of them into XENO — the Play listing would show "Microphone" and
             need a data-safety declaration for a feature we do not ship. Declaring only this one
             activity means we inherit no permissions at all.
 
             The scheme must match the redirect URI registered in the Discord developer portal
             (discord-<application id>) or the browser hands the code back to nothing and the sign-in
-            silently never completes. Same id as kApplicationId in cpp/discord_bridge.cpp. ARMSX3 app id: 1534624714989764829.
+            silently never completes. Same id as kApplicationId in cpp/discord_bridge.cpp. XENO app id: 1534624714989764829.
 
             Its ForegroundService is deliberately NOT declared — it exists for voice.
         -->
@@ -179,7 +179,7 @@
         <!--
             The Discord helper, in its own process.
 
-            android:process=":discord" is the whole point, not a performance choice. ARMSX2 is
+            android:process=":discord" is the whole point, not a performance choice. XENO is
             GPL-3.0+ and the Discord Social SDK is proprietary with no published licence; linking
             them into one binary would make the emulator a combined work with a library whose
             corresponding source cannot be supplied. Two programs exchanging messages over IPC is
@@ -192,12 +192,12 @@
             Activity handed to it, and one from the app process would be unusable from here.
         -->
         <service
-            android:name="com.armsx2.discord.DiscordService"
+            android:name="com.xeno.discord.DiscordService"
             android:process=":discord"
             android:exported="false" />
 
         <activity
-            android:name="com.armsx2.discord.DiscordAuthActivity"
+            android:name="com.xeno.discord.DiscordAuthActivity"
             android:process=":discord"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"

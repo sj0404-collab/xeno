@@ -12,7 +12,7 @@ android {
     ndkVersion = "29.0.13113456"
 
     defaultConfig {
-        applicationId = "com.armsx3"
+        applicationId = "com.xeno.emulator"
         minSdk = 29
         targetSdk = 35
         versionCode = 1
@@ -87,9 +87,9 @@ android {
     }
 }
 
-// ARMSX3: the ANGLE prebuilts and the verifyAngleLibs task that guarded them used
+// XENO: the ANGLE prebuilts and the verifyAngleLibs task that guarded them used
 // to live here. They now live in android/armsx3-ui, which is the module that
-// actually ships (applicationId com.armsx3) and the module whose UI exposes the
+// actually ships (applicationId com.xeno.emulator) and the module whose UI exposes the
 // OpenGL renderer's ANGLE option. This module builds nothing that ships, so the
 // guard here could never protect the APK it was written for -- and it never ran at
 // all: its message was written with `${'$'}`-style template escaping, and the `", "`

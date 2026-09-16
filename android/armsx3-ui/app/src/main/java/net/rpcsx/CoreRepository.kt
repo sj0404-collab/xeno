@@ -20,7 +20,7 @@ enum class CoreStatus {
 /**
  * The emulator core is not shipped inside the APK (it would be ~60 MB; the APK
  * carries only the JNI glue and assets). Winlator-style, the core is a separate
- * `libarmsx3-core.so` asset on the same GitHub release as the APK, downloaded on
+ * `libxeno-core.so` asset on the same GitHub release as the APK, downloaded on
  * demand and kept in the app's PRIVATE internal directory -- the only place
  * dlopen() may map it for execution. External/SD storage is mounted noexec and
  * would refuse to load it.
@@ -33,7 +33,7 @@ enum class CoreStatus {
  */
 class CoreRepository {
     companion object {
-        const val CORE_LIB_NAME = "libarmsx3-core.so"
+        const val CORE_LIB_NAME = "libxeno-core.so"
 
         // The repo that hosts both the APK and the core releases.
         private const val GitHubRepo = "sj0404-collab/xeno"
@@ -48,7 +48,7 @@ class CoreRepository {
 
         /** Private app data dir holding the downloaded core. Exec-safe. */
         fun dir(context: Context): File =
-            context.getDir("armsx3-core", Context.MODE_PRIVATE)
+            context.getDir("xeno-core", Context.MODE_PRIVATE)
 
         fun coreFile(context: Context): File =
             File(dir(context), CORE_LIB_NAME)
@@ -69,7 +69,7 @@ class CoreRepository {
                 conn.connectTimeout = 10_000
                 conn.readTimeout = 15_000
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
-                conn.setRequestProperty("User-Agent", "ARMSX3-Core")
+                conn.setRequestProperty("User-Agent", "XENO-Core")
                 if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                     throw java.io.IOException("GitHub API ${conn.responseCode}")
                 }
@@ -112,7 +112,7 @@ class CoreRepository {
             try {
                 http.connectTimeout = 15_000
                 http.readTimeout = 30_000
-                http.setRequestProperty("User-Agent", "ARMSX3-Core")
+                http.setRequestProperty("User-Agent", "XENO-Core")
                 if (http.responseCode != HttpURLConnection.HTTP_OK) {
                     throw java.io.IOException("Download failed (HTTP ${http.responseCode})")
                 }
