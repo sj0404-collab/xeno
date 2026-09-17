@@ -107,7 +107,7 @@ fun PerformanceTab(state: MutableState<Settings>) {
                         )
                         com.xeno.ui.InGameOverlay.saveSettings(rec)
                         Toast.makeText(
-                            LocalContext.current,
+                            context,
                             appliedMsg,
                             Toast.LENGTH_SHORT,
                         ).show()
