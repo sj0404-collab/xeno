@@ -28,6 +28,10 @@ on:
       variant:
         description: APK ISA/API variant (legacy, a11, a13, a15)
         default: "a13"
+      slim:
+        description: Diagnostic slim build (plain background, no news/cloud/discord/themes) - 1 to enable
+        type: boolean
+        default: false
 
 concurrency:
   group: docker-arm64-apk-${{ github.ref }}-${{ github.event_name }}
@@ -159,6 +163,7 @@ jobs:
         shell: bash
         env:
           VARIANTS: "${{ github.event.inputs.variant || 'a13' }}"
+          SLIM: "${{ github.event.inputs.slim == 'true' && '1' || '0' }}"
         run: |
           # OUT_DIR is /src/out; build-variants.sh does not mkdir it, and the
           # bind mount only creates /src, so the final APK copy would fail
@@ -179,6 +184,7 @@ jobs:
                 -e OUT_DIR=/src/out \
                 -e CMAKE_VERSION=3.30.5 \
                 -e VARIANTS="$VARIANTS" \
+                -e XENO_SLIM="$SLIM" \
                 xeno-android-ci:latest \
                 bash android/build-variants.sh; then
               status=0

@@ -155,18 +155,22 @@ fun HomeScreen(
     var deleteCategory by remember { mutableStateOf<String?>(null) }
     var showClearRecentsConfirm by remember { mutableStateOf(false) }
     // #9 custom library background — inert until the user picks an image.
-    LaunchedEffect(Unit) { LibraryBackground.ensureLoaded(); CoverArtStyle.load() }
-    // The animated background switched itself off because the last run died with it on screen
-    // (LibraryBackground.armSaver). Say so -- silently reverting a setting the user chose reads
-    // as the setting being broken, and the name tells them which one to avoid.
-    LaunchedEffect(LibraryBackground.crashedSaver.value) {
-        LibraryBackground.crashedSaver.value?.let { kind ->
-            LibraryBackground.crashedSaver.value = null
-            Toast.makeText(
-                context,
-                "Animated background turned off: ${LibraryBackground.saverName(kind)} crashed last time.",
-                Toast.LENGTH_LONG,
-            ).show()
+    // Slim diagnostic build: no library background machinery at all (the default XMB wave is a
+    // GLES3 view that can hard-crash at cold start on some drivers; slim renders a plain color).
+    if (!com.xeno.BuildConfig.SLIM) {
+        LaunchedEffect(Unit) { LibraryBackground.ensureLoaded(); CoverArtStyle.load() }
+        // The animated background switched itself off because the last run died with it on screen
+        // (LibraryBackground.armSaver). Say so -- silently reverting a setting the user chose reads
+        // as the setting being broken, and the name tells them which one to avoid.
+        LaunchedEffect(LibraryBackground.crashedSaver.value) {
+            LibraryBackground.crashedSaver.value?.let { kind ->
+                LibraryBackground.crashedSaver.value = null
+                Toast.makeText(
+                    context,
+                    "Animated background turned off: ${LibraryBackground.saverName(kind)} crashed last time.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
@@ -197,7 +201,10 @@ fun HomeScreen(
         // that strip was the "blue bar" in landscape.
         backgroundLayer = {
             val libraryBg = LibraryBackground.uri.value
-            if (libraryBg == null) {
+            if (com.xeno.BuildConfig.SLIM) {
+                // Slim: a plain color backdrop. No GLES3 wave, no animated 2D wave, no Coil GIF.
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            } else if (libraryBg == null) {
                 // Default: the live PS3-XMB wave (XmbGlView — a GLES3 port of linkev's
                 // grid-displacement mesh, matching iOS). When GL can't init — older Mali without
                 // float-texture filtering, or any EGL failure — we fall back to LibraryWaveBackground,

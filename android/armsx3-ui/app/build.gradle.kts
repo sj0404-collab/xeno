@@ -34,8 +34,18 @@ android {
         // agree -- an APK that installs below its core's target is a dlopen failure at boot.
         minSdk = (project.findProperty("xeno.minSdk") as String?)?.toInt() ?: 33
         targetSdk = 37
+
+        // Slim diagnostic build (-Pxeno.slim=true, set by android/build-variants.sh when
+        // XENO_SLIM=1). Two things change: the versionName (so the APK self-reports as the
+        // slim variant) and BuildConfig.SLIM, which gates the heavyweight UI/init paths the
+        // regular build runs at launch. versionCode stays 100 so it installs OVER the regular
+        // build (equal code, same signature) and the user can switch back without a wipe.
+        val slim = (project.findProperty("xeno.slim") as String?) == "true"
         versionCode = 100
         versionName = "1.0.0-mali"
+        if (slim) {
+            versionName = "1.0.0-slim"
+        }
 
         // XENO's UI reads these. STORAGE_ALL_FILES gates the all-files storage path in
         // onboarding; IN_APP_UPDATER gates the in-app GitHub-release updater.
@@ -49,6 +59,7 @@ android {
         buildConfigField("boolean", "STORAGE_ALL_FILES", "true")
         buildConfigField("boolean", "IN_APP_UPDATER", "true")
         buildConfigField("boolean", "FRAME_GENERATION", "true")
+        buildConfigField("boolean", "SLIM", slim.toString())
 
         ndk {
             // The core is arm64-only.

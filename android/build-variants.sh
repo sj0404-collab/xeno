@@ -107,7 +107,13 @@ VARIANT_a15="29.0.14206865:35:armv8.2-a+dotprod+fp16:a15-armv8.2-sdk35"
 VARIANTS="${VARIANTS:-${*:-a13}}"
 
 version_name() {
-	sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' "$UI/app/build.gradle.kts" | head -1
+	# The versionName literal is "1.0.0-mali" in the file; the slim build overrides it in
+	# gradle via -Pxeno.slim, so mirror the same override here for the APK filename.
+	if [[ "${XENO_SLIM:-}" == "1" ]]; then
+		echo "1.0.0-slim"
+	else
+		sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' "$UI/app/build.gradle.kts" | head -1
+	fi
 }
 
 build_variant() {
@@ -231,10 +237,16 @@ local native_flags=()
 
 	# assembleGithubRelease, not assembleRelease: the flavor split means there is no
 	# flavorless release variant any more. The play bundle is built by build-play-aab.sh.
+	# XENO_SLIM=1 appends -Pxeno.slim=true so the diagnostic slim build strips the heavy
+	# UI/init paths (see BuildConfig.SLIM gates in the Kotlin).
+	local slim_flag=""
+	if [[ "${XENO_SLIM:-}" == "1" ]]; then
+		slim_flag="-Pxeno.slim=true"
+	fi
 	if [ -f "$UI/gradlew.bat" ] && [[ "$NDK_PREBUILT" == windows-* ]]; then
-		( cd "$UI" && cmd //c "gradlew.bat --quiet :app:assembleGithubRelease -Parmsx3.minSdk=$api" )
+		( cd "$UI" && cmd //c "gradlew.bat --quiet :app:assembleGithubRelease -Parmsx3.minSdk=$api $slim_flag" )
 	else
-		( cd "$UI" && sh ./gradlew --quiet :app:assembleGithubRelease "-Parmsx3.minSdk=$api" )
+		( cd "$UI" && sh ./gradlew --quiet :app:assembleGithubRelease "-Parmsx3.minSdk=$api" $slim_flag )
 	fi
 
 	local out="$OUT_DIR/ARMSX3-$(version_name)-$suffix.apk"

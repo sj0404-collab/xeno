@@ -2149,26 +2149,6 @@ open class MainActivityRuntime : ComponentActivity() {
         ControllerMappings.installRuntimeCacheInvalidation()
         com.xeno.i18n.I18n.init(applicationContext)
         applyEmulationOrientation()
-        com.xeno.CoverArtStyle.load()
-        com.xeno.GridLabels.load()
-        com.xeno.EnglishTitles.load()
-        com.xeno.CustomNames.load()
-        com.xeno.HiddenGames.load()
-        com.xeno.LibraryTitles.load()
-        com.xeno.LibraryRecentShelf.load()
-        // Player-slot pins, so a controller the user assigned by hand is on its slot
-        // before the first button press rather than after it.
-        com.xeno.input.PadRouter.loadPins()
-        // Direct USB rumble for a PlayStation pad. Asks for USB permission only when one is
-        // actually attached, so nobody sees a prompt for a controller they do not own.
-        com.xeno.input.UsbRumble.loadTakeover()
-        com.xeno.input.UsbRumble.start(this)
-        // Discord needs an Activity to launch its sign-in browser and has no other way to obtain
-        // one. Handing it over costs nothing when the user has not opted in — start() returns
-        // immediately unless the feature is enabled AND a token is stored.
-        com.xeno.DiscordPresence.attachActivity(this)
-        com.xeno.DiscordPresence.start()
-        com.xeno.LibraryView.load()
         com.xeno.ui.UiScale.load()
         com.xeno.ui.theme.ThemePreferences.load()
         com.xeno.ui.theme.BootLogoPreferences.load()
@@ -2177,34 +2157,60 @@ open class MainActivityRuntime : ComponentActivity() {
         com.xeno.ui.theme.LibraryChromePreferences.load()
         com.xeno.ui.theme.LauncherOrientationPreferences.load()
         com.xeno.ui.theme.LibraryBackgroundColorPreferences.load()
-        com.xeno.LibraryMusic.load()
-        com.xeno.PauseMusic.load()
-        com.xeno.MenuSfx.load(applicationContext)
-        com.xeno.CloudSync.load()
-        com.xeno.GithubSaveSync.load()
-        com.xeno.ControllerSkinStore.load(applicationContext)
-        // Low-battery / high-temperature banners. Registers for the sticky battery broadcast, so
-        // there is no polling; the toggle lives in App settings.
-        com.xeno.OverlayRepo.load()
-        com.xeno.CoverRegionIndex.load()
-        // Only parses the 2.6MB GameDB when a non-default cover region is actually in use.
-        if (com.xeno.CoverRegionIndex.region.intValue != 0)
-            com.xeno.CoverRegionIndex.ensureBuilt(applicationContext)
-        // Second-display utility panel (Ayn Thor / Retroid dual screen). No-op with one display.
-        com.xeno.SecondScreen.load()
-        com.xeno.SecondScreen.attach(applicationContext)
-        com.xeno.BatteryWatcher.load()
-        com.xeno.BatteryWatcher.start(applicationContext)
+        // Slim diagnostic build: skip the whole non-essential subsystem block. Every gated
+        // feature degrades to its default (no covers art/names overrides, no news, no cloud,
+        // no Discord, no music/sfx, no second screen, no battery/thermal banners).
+        if (!com.xeno.BuildConfig.SLIM) {
+            com.xeno.CoverArtStyle.load()
+            com.xeno.GridLabels.load()
+            com.xeno.EnglishTitles.load()
+            com.xeno.CustomNames.load()
+            com.xeno.HiddenGames.load()
+            com.xeno.LibraryTitles.load()
+            com.xeno.LibraryRecentShelf.load()
+            // Direct USB rumble for a PlayStation pad. Asks for USB permission only when one is
+            // actually attached, so nobody sees a prompt for a controller they do not own.
+            com.xeno.input.UsbRumble.loadTakeover()
+            com.xeno.input.UsbRumble.start(this)
+            // Discord needs an Activity to launch its sign-in browser and has no other way to obtain
+            // one. Handing it over costs nothing when the user has not opted in — start() returns
+            // immediately unless the feature is enabled AND a token is stored.
+            com.xeno.DiscordPresence.attachActivity(this)
+            com.xeno.DiscordPresence.start()
+            com.xeno.LibraryView.load()
+            com.xeno.LibraryMusic.load()
+            com.xeno.PauseMusic.load()
+            com.xeno.MenuSfx.load(applicationContext)
+            com.xeno.CloudSync.load()
+            com.xeno.GithubSaveSync.load()
+            com.xeno.ControllerSkinStore.load(applicationContext)
+            // Low-battery / high-temperature banners. Registers for the sticky battery broadcast,
+            // so there is no polling; the toggle lives in App settings.
+            com.xeno.OverlayRepo.load()
+            com.xeno.CoverRegionIndex.load()
+            // Only parses the 2.6MB GameDB when a non-default cover region is actually in use.
+            if (com.xeno.CoverRegionIndex.region.intValue != 0)
+                com.xeno.CoverRegionIndex.ensureBuilt(applicationContext)
+            // Second-display utility panel (Ayn Thor / Retroid dual screen). No-op with one display.
+            com.xeno.SecondScreen.load()
+            com.xeno.SecondScreen.attach(applicationContext)
+            com.xeno.BatteryWatcher.load()
+            com.xeno.BatteryWatcher.start(applicationContext)
+            // Starts the temperature poll if the overlay wants it. Costs one file read every couple
+            // of seconds and stops entirely when the option is off.
+            runCatching { com.xeno.Thermals.load(this) }
+            // Push the saved haptic strength + achievement-sound volume into their native gates
+            // before any rumble or unlock sound can fire (both default to 1.0 = as authored until
+            // set here).
+            ControllerMappings.syncHapticIntensity()
+            com.xeno.ui.achievements.AchievementsViewModel.syncSoundVolume()
+        }
+        // Player-slot pins, so a controller the user assigned by hand is on its slot
+        // before the first button press rather than after it.
+        com.xeno.input.PadRouter.loadPins()
         // Restore the saved rumble master toggle into the native gate (NativeApp.onPadRumble).
         NativeApp.sRumbleEnabled = ControllerMappings.rumbleEnabled()
         NativeApp.sPhoneRumbleEnabled = ControllerMappings.phoneRumbleEnabled()
-        // Starts the temperature poll if the overlay wants it. Costs one file read every couple
-        // of seconds and stops entirely when the option is off.
-        runCatching { com.xeno.Thermals.load(this) }
-        // Push the saved haptic strength + achievement-sound volume into their native gates before
-        // any rumble or unlock sound can fire (both default to 1.0 = as authored until set here).
-        ControllerMappings.syncHapticIntensity()
-        com.xeno.ui.achievements.AchievementsViewModel.syncSoundVolume()
         // #394: watch for controller unplug / re-enumeration so a departed pad frees its slot (see
         // inputDeviceListener). Registered until onDestroy so a sleep/wake remove is caught even
         // while the activity is paused.
@@ -2350,8 +2356,9 @@ open class MainActivityRuntime : ComponentActivity() {
             }
             // Auto-update-on-launch (github sideload flavor only, opt-in via the App-tab toggle,
             // default off). Renders nothing unless a newer GitHub release is found on boot, then
-            // pops the update prompt. Play flavor's AutoUpdateGate is a no-op stub.
-            if (com.xeno.BuildConfig.IN_APP_UPDATER) {
+            // pops the update prompt. Play flavor's AutoUpdateGate is a no-op stub. Skipped in
+            // the slim diagnostic build to cut a network+parse path from cold start.
+            if (com.xeno.BuildConfig.IN_APP_UPDATER && !com.xeno.BuildConfig.SLIM) {
                 com.xeno.update.AutoUpdateGate()
             }
             // First-time setup deferral: when the wizard finishes and
