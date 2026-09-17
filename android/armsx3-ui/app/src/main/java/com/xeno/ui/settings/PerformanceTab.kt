@@ -90,6 +90,7 @@ fun PerformanceTab(state: MutableState<Settings>) {
                 modifier = Modifier.padding(start = 6.dp, top = 4.dp),
             )
             val appliedMsg = str("perf.mali.preset.applied") + " " + maliProfile.model
+            val context = LocalContext.current
             ButtonsRow(listOf(
                 ButtonInfo(
                     label = str("perf.mali.preset.apply"),
