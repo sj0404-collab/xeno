@@ -333,6 +333,12 @@ open class MainActivityRuntime : ComponentActivity() {
 
         val surface = mutableStateOf<EmulationSurface?>(null)
 
+        // Live settings state the settings overlay mutates; aliased here so the
+        // Performance tab's Mali preset row reads the in-game overlay's current
+        // per-game/global settings without a hard dependency on InGameOverlay.
+        val prefsState: androidx.compose.runtime.MutableState<com.xeno.config.Settings> =
+            com.xeno.ui.InGameOverlay.settingsState
+
         @JvmField
         val eState = mutableStateOf(EmuState.STOPPED)
 
@@ -836,7 +842,7 @@ open class MainActivityRuntime : ComponentActivity() {
             return n + (if (sawJoyCon) 1 else 0)
         }
 
-        private fun applyRendererPrefs() {
+        fun applyRendererPrefs() {
             // Resolve per-game (∘ global) settings up front so the renderer backend
             // and internal resolution come from THIS title's tier, not a stale
             // global value. Sync the session state the Renderer UI reads, too.

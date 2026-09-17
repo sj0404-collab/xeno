@@ -30,6 +30,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -526,6 +527,50 @@ fun SettingsDivider() {
                 )
             ),
     )
+}
+
+/** Read-only section label, no controls — used for informational blocks such as
+ *  the Mali GPU preset hint on the Performance tab. */
+@Composable
+fun SettingsLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 18.sp,
+        lineHeight = 23.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp),
+    )
+}
+
+/** One action inside a [ButtonsRow]. [backingField] carries the row's current
+ *  value for controller-focus semantics; presence, not content, matters. */
+class ButtonInfo(
+    val label: String,
+    val backingField: Boolean = false,
+    val onClick: () -> Unit = {},
+)
+
+/** A row of outlined action buttons, controller-focusable individually. */
+@Composable
+fun ButtonsRow(
+    buttons: List<ButtonInfo>,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        buttons.forEach { button ->
+            OutlinedButton(
+                onClick = button.onClick,
+                modifier = Modifier.controllerFocusable(
+                    controllerId = "btn:${button.label}",
+                    onConfirm = button.onClick,
+                ),
+            ) { Text(button.label) }
+        }
+    }
 }
 
 /** Collapsible settings section: a tappable header (▸ collapsed / ▾ expanded) that

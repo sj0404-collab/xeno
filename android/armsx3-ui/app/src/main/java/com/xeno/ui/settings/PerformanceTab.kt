@@ -110,7 +110,7 @@ fun PerformanceTab(state: MutableState<Settings>) {
                             appliedMsg,
                             Toast.LENGTH_SHORT,
                         ).show()
-                        com.xeno.runtime.MainActivityRuntime.surface.value?.applyRendererPrefs()
+                        com.xeno.runtime.MainActivityRuntime.applyRendererPrefs()
                     },
                 ),
             ))
