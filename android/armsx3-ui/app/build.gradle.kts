@@ -314,6 +314,10 @@ dependencies {
     // kotlinx-serialization.
     implementation(libs.kotlinxSerializationJson)
 
+    // Google Drive API for cloud save sync
+    implementation(libs.play.services.auth)
+    implementation(libs.google.drive.api)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

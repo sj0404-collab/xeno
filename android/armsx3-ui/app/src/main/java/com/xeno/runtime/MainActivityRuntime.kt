@@ -761,6 +761,18 @@ open class MainActivityRuntime : ComponentActivity() {
                     }
                     // GitHub transport is independent of the WebDAV one — run it as its own
                     // worker if configured, so a game exit syncs to whichever cloud is set up.
+                    val gdriveSnapshot = com.xeno.GoogleDriveSync.snapshot()
+                    if (booted && gdriveSnapshot.autoPush && gdriveSnapshot.config != null) {
+                        kotlin.concurrent.thread(name = "gdrive-sync-exit") {
+                            runCatching {
+                                val pushed = kotlinx.coroutines.runBlocking { com.xeno.GoogleDriveSync.pushAllSaves() }
+                                android.util.Log.i("GoogleDriveSync", "game-exit sync pushed $pushed save(s)")
+                            }
+                        }
+                    }
+
+                    // GitHub transport is independent of the WebDAV one — run it as its own
+                    // worker if configured, so a game exit syncs to whichever cloud is set up.
                     val ghSnapshot = com.xeno.GithubSaveSync.snapshot()
                     if (booted && ghSnapshot.autoPush && ghSnapshot.token != null) {
                         kotlin.concurrent.thread(name = "github-sync-exit") {
@@ -1661,6 +1673,14 @@ open class MainActivityRuntime : ComponentActivity() {
         fun isAndroidEmulator(): Boolean {
             return Build.MODEL.startsWith("sdk_")
         }
+
+        /** Launch Google Sign-In for Drive sync. Call from composable via
+         *  MainActivityRuntime.launchGoogleSignIn(). */
+        fun launchGoogleSignIn() {
+            instance?.googleSignInAction?.launch(
+                com.xeno.GoogleDriveSync.getSignInIntent(instance!!)
+            )
+        }
     }
 
     val swapDiscAction = registerForActivityResult(
@@ -1712,6 +1732,23 @@ open class MainActivityRuntime : ComponentActivity() {
                     launchGame(uri, null)
                 }
             } catch (_: Exception) { }
+        }
+    }
+
+    // Google Sign-In for Drive sync
+    val googleSignInAction = registerForActivityResult(
+        StartActivityForResult()
+    ) { result: ActivityResult ->
+        val data = result.data
+        if (result.resultCode == RESULT_OK && data != null) {
+            val ok = com.xeno.GoogleDriveSync.handleSignInResult(data, this)
+            if (ok) {
+                println("@@ANDROID_GDRIVE_SIGNIN@@ success")
+            } else {
+                println("@@ANDROID_GDRIVE_SIGNIN@@ failed")
+            }
+        } else {
+            println("@@ANDROID_GDRIVE_SIGNIN@@ cancelled or failed")
         }
     }
 
@@ -2181,6 +2218,7 @@ open class MainActivityRuntime : ComponentActivity() {
         com.xeno.PauseMusic.load()
         com.xeno.MenuSfx.load(applicationContext)
         com.xeno.CloudSync.load()
+        com.xeno.GoogleDriveSync.load(applicationContext)
         com.xeno.GithubSaveSync.load()
         com.xeno.ControllerSkinStore.load(applicationContext)
         // Low-battery / high-temperature banners. Registers for the sticky battery broadcast, so

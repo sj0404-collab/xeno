@@ -426,15 +426,180 @@ private fun CloudSection() {
         }
     } // CloudSection Column
 
-    // Second, independent cloud transport: GitHub save sync. It has its own state, its own
-    // buttons, and never touches the WebDAV config above; both can be configured at once.
+    // Second cloud transport: Google Drive save sync. Uses Drive API v3 with
+    // appDataFolder (hidden per-app folder). Independent of WebDAV and GitHub.
+    Spacer(Modifier.height(12.dp))
+    GoogleDriveSection()
+
+    // Third, independent cloud transport: GitHub save sync. It has its own state, its own
+    // buttons, and never touches the WebDAV config above; all three can be configured at once.
     Spacer(Modifier.height(12.dp))
     GithubCloudSection()
 }
 
-/** GitHub save sync block: token, repo name, verify/push/pull under the token's own account. */
+/** Google Drive save sync block: sign-in, auto-push, push/pull. Uses Drive API v3
+ *  with appDataFolder (hidden per-app folder). Independent of WebDAV and GitHub. */
 @Composable
-private fun GithubCloudSection() {
+private fun GoogleDriveSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+
+    // Read sign-in state once in composable scope.
+    val signedIn = com.xeno.GoogleDriveSync.isSignedIn()
+    val accountName = com.xeno.GoogleDriveSync.accountName()
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsDivider()
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("📁", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                str("gdrive.section.title"),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Text(
+            str("gdrive.section.description"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        Text(
+            str("gdrive.section.hint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+        )
+
+        if (!signedIn) {
+            val signIn = {
+                busy = true
+                status = str("gdrive.signin.working")
+                // Launch Google Sign-In via ActivityResultLauncher in MainActivityRuntime
+                com.xeno.runtime.MainActivityRuntime.launchGoogleSignIn()
+                // The result is handled asynchronously via ActivityResultLauncher callback
+                // We'll poll for sign-in state change
+                scope.launch(Dispatchers.Main) {
+                    var attempts = 0
+                    while (attempts < 30 && !com.xeno.GoogleDriveSync.isSignedIn()) {
+                        delay(500)
+                        attempts++
+                    }
+                    if (com.xeno.GoogleDriveSync.isSignedIn()) {
+                        status = str("gdrive.signedin").format(com.xeno.GoogleDriveSync.accountName() ?: "")
+                    } else {
+                        status = str("gdrive.signin.cancelled")
+                    }
+                    busy = false
+                }
+            }
+            OutlinedButton(
+                onClick = signIn,
+                enabled = !busy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .controllerFocusable("gdrive.signin", onConfirm = signIn),
+            ) { Text(str("gdrive.signin")) }
+        } else {
+            // Signed in — show account and controls
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    str("gdrive.signedin").format(accountName ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                val signOut = {
+                    busy = true
+                    scope.launch(Dispatchers.IO) {
+                        com.xeno.GoogleDriveSync.signOut(context)
+                        status = str("gdrive.notsignedin")
+                        busy = false
+                    }
+                }
+                OutlinedButton(
+                    onClick = signOut,
+                    enabled = !busy,
+                    modifier = Modifier.controllerFocusable("gdrive.signout", onConfirm = signOut),
+                ) { Text(str("gdrive.signout")) }
+            }
+
+            SettingsDivider()
+
+            ToggleRow(
+                label = str("gdrive.autopush"),
+                value = com.xeno.GoogleDriveSync.autoPush,
+                description = str("gdrive.autopush.description"),
+                onChange = { com.xeno.GoogleDriveSync.updateAutoPush(it) },
+            )
+
+            // Hoist labels for coroutine scope
+            val disabledLabel = str("gdrive.notsignedin")
+            val pushWorkingLabel = str("gdrive.working")
+            val pushFailLabel = str("gdrive.failed")
+            val pushedLabel = str("gdrive.pushed")
+            val pullWorkingLabel = str("gdrive.working")
+            val pullFailLabel = str("gdrive.failed")
+            val pulledLabel = str("gdrive.pulled")
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val push = {
+                    busy = true
+                    status = pushWorkingLabel
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val n = com.xeno.GoogleDriveSync.pushAllSaves()
+                            status = str("gdrive.pushed").format(n)
+                        } catch (e: Exception) {
+                            status = str("gdrive.failed").format(e.message ?: "")
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = push,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).controllerFocusable("gdrive.push", onConfirm = push),
+                ) { Text(str("gdrive.push")) }
+
+                val pull = {
+                    busy = true
+                    status = pullWorkingLabel
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val n = com.xeno.GoogleDriveSync.pullAllSaves()
+                            status = str("gdrive.pulled").format(n)
+                        } catch (e: Exception) {
+                            status = str("gdrive.failed").format(e.message ?: "")
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = pull,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).controllerFocusable("gdrive.pull", onConfirm = pull),
+                ) { Text(str("gdrive.pull")) }
+            }
+        }
+
+        if (status.isNotEmpty()) {
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status.startsWith("✓") || status.contains("Uploaded") || status.contains("Downloaded")) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+        }
+    }
+}
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
