@@ -188,23 +188,23 @@ local native_flags=()
 	# Nothing links libarmsx3_lsfg.so -- the core reaches it with dlopen, because framegen's volk
 	# defines the same 655 vk* globals our renderer uses and linking them together would let
 	# volkLoadDevice() repoint the whole renderer at framegen's device. The consequence for the
-	# build is that it is NOT a dependency of libarmsx3-core.so and will not be built by asking
+	# build is that it is NOT a dependency of libxeno-core.so and will not be built by asking
 	# for it: name it here or ship an APK with frame generation silently missing.
 	local ninja_path="$CMAKE_BIN:$PATH"
 	if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
 		ninja_path="/c/mingw64/bin:$ninja_path"
 	fi
 	if [[ -d "$ROOT/3rdparty/lsfg/lsfg-vk-android/framegen" ]]; then
-		PATH="$ninja_path" ninja -C "$build_dir" android/libarmsx3-core.so armsx3_lsfg
+		PATH="$ninja_path" ninja -C "$build_dir" android/libxeno-core.so armsx3_lsfg
 	else
 		echo "==> $name: lsfg-vk-android not present, building without frame generation"
-		PATH="$ninja_path" ninja -C "$build_dir" android/libarmsx3-core.so
+		PATH="$ninja_path" ninja -C "$build_dir" android/libxeno-core.so
 	fi
 
 	local strip="$ANDROID_HOME/ndk/$ndk/toolchains/llvm/prebuilt/$NDK_PREBUILT/bin/llvm-strip$NDK_EXE"
 
-	"$strip" --strip-unneeded -o "$JNI_LIBS/libarmsx3-core.so" \
-		"$build_dir/android/libarmsx3-core.so"
+	"$strip" --strip-unneeded -o "$JNI_LIBS/libxeno-core.so" \
+		"$build_dir/android/libxeno-core.so"
 
 	local lsfg_so="$build_dir/3rdparty/lsfg/libarmsx3_lsfg.so"
 

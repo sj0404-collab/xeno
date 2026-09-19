@@ -63,13 +63,13 @@ add_library(rpcsx-android SHARED
     ${CMAKE_SOURCE_DIR}/rpcs3/rpcs3_version.cpp
 )
 
-# Ship as libarmsx3-core.so, which is the name the app calls
-# System.loadLibrary("armsx3-core") for. Setting OUTPUT_NAME (rather than
+# Ship as libxeno-core.so, which is the name the app calls
+# System.loadLibrary("xeno-core") for. Setting OUTPUT_NAME (rather than
 # renaming the file after the fact) also fixes the SONAME, so the file name and
 # the name the dynamic linker registers it under agree -- a mismatch there works
 # by luck for a plain dlopen and stops working the moment anything resolves it
 # by soname.
-set_target_properties(rpcsx-android PROPERTIES OUTPUT_NAME armsx3-core)
+set_target_properties(rpcsx-android PROPERTIES OUTPUT_NAME xeno-core)
 
 target_compile_features(rpcsx-android PRIVATE cxx_std_23)
 

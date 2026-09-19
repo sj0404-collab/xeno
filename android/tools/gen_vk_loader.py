@@ -21,7 +21,7 @@ WHY THIS EXISTS
     which keeps adrenotools app-side and out of the emulator.
 
 REGENERATE
-    llvm-nm -u libarmsx3-core.so | awk '{print $NF}' | grep ^vk | sort -u > syms.txt
+    llvm-nm -u libxeno-core.so | awk '{print $NF}' | grep ^vk | sort -u > syms.txt
     python3 android/tools/gen_vk_loader.py syms.txt
 """
 import pathlib

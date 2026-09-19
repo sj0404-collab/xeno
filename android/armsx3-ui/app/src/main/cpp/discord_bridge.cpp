@@ -1,6 +1,6 @@
-// Discord Social SDK bridge for ARMSX3.
+// Discord Social SDK bridge for XENO.
 //
-// Produces libarmsx3_discord.so, which DiscordNative.java loads. It runs in its
+// Produces libxeno_discord.so, which DiscordNative.java loads. It runs in its
 // own process (android:process=":discord" in the manifest) on purpose, not for
 // performance: the Social SDK is proprietary with no published licence, and the
 // emulator core is GPL. Keeping it in a separate process keeps the two out of
@@ -145,14 +145,14 @@ jstring jout(JNIEnv* env, const std::string& s) {
 extern "C" {
 
 JNIEXPORT jboolean JNICALL
-Java_com_armsx2_discord_DiscordNative_available(JNIEnv*, jclass) {
+Java_com_xeno_discord_DiscordNative_available(JNIEnv*, jclass) {
     // Reaching this at all means libdiscord_partner_sdk.so resolved, since this
     // library links against it.
     return JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL
-Java_com_armsx2_discord_DiscordNative_start(JNIEnv* env, jclass, jstring jtoken) {
+Java_com_xeno_discord_DiscordNative_start(JNIEnv* env, jclass, jstring jtoken) {
     State& s = state();
     if (s.client) {
         return;
@@ -215,7 +215,7 @@ Java_com_armsx2_discord_DiscordNative_start(JNIEnv* env, jclass, jstring jtoken)
 }
 
 JNIEXPORT void JNICALL
-Java_com_armsx2_discord_DiscordNative_authorize(JNIEnv*, jclass) {
+Java_com_xeno_discord_DiscordNative_authorize(JNIEnv*, jclass) {
     State& s = state();
     if (!s.client) {
         return;
@@ -273,7 +273,7 @@ Java_com_armsx2_discord_DiscordNative_authorize(JNIEnv*, jclass) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_armsx2_discord_DiscordNative_takeToken(JNIEnv* env, jclass) {
+Java_com_xeno_discord_DiscordNative_takeToken(JNIEnv* env, jclass) {
     State& s = state();
     std::lock_guard<std::mutex> lock(s.text_mutex);
     std::string out;
@@ -284,19 +284,19 @@ Java_com_armsx2_discord_DiscordNative_takeToken(JNIEnv* env, jclass) {
 }
 
 JNIEXPORT jint JNICALL
-Java_com_armsx2_discord_DiscordNative_status(JNIEnv*, jclass) {
+Java_com_xeno_discord_DiscordNative_status(JNIEnv*, jclass) {
     return state().status.load();
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_armsx2_discord_DiscordNative_error(JNIEnv* env, jclass) {
+Java_com_xeno_discord_DiscordNative_error(JNIEnv* env, jclass) {
     State& s = state();
     std::lock_guard<std::mutex> lock(s.text_mutex);
     return jout(env, s.error);
 }
 
 JNIEXPORT void JNICALL
-Java_com_armsx2_discord_DiscordNative_setPlaying(JNIEnv* env, jclass, jstring jserial,
+Java_com_xeno_discord_DiscordNative_setPlaying(JNIEnv* env, jclass, jstring jserial,
                                                  jstring jtitle, jstring jcoverUrl,
                                                  jstring jraPresence) {
     State& s = state();
@@ -404,7 +404,7 @@ void applyPresence(const std::string& serial, const std::string& title,
 extern "C" {
 
 JNIEXPORT jstring JNICALL
-Java_com_armsx2_discord_DiscordNative_friends(JNIEnv* env, jclass) {
+Java_com_xeno_discord_DiscordNative_friends(JNIEnv* env, jclass) {
     State& s = state();
     if (!s.client || !s.ready.load()) {
         return jout(env, "");
@@ -440,7 +440,7 @@ Java_com_armsx2_discord_DiscordNative_friends(JNIEnv* env, jclass) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_armsx2_discord_DiscordNative_self(JNIEnv* env, jclass) {
+Java_com_xeno_discord_DiscordNative_self(JNIEnv* env, jclass) {
     State& s = state();
     if (!s.client || !s.ready.load()) {
         return jout(env, "");
@@ -454,14 +454,14 @@ Java_com_armsx2_discord_DiscordNative_self(JNIEnv* env, jclass) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_armsx2_discord_DiscordNative_pump(JNIEnv*, jclass) {
+Java_com_xeno_discord_DiscordNative_pump(JNIEnv*, jclass) {
     // Must run on the thread that created the Client. DiscordService guarantees
     // that; calling it from anywhere else is undefined behaviour in the SDK.
     discordpp::RunCallbacks();
 }
 
 JNIEXPORT void JNICALL
-Java_com_armsx2_discord_DiscordNative_stop(JNIEnv*, jclass) {
+Java_com_xeno_discord_DiscordNative_stop(JNIEnv*, jclass) {
     State& s = state();
     if (!s.client) {
         return;

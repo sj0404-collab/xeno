@@ -213,7 +213,13 @@ android {
         // ~60 MB smaller). It is staged by build-variants.sh only so the release
         // workflow can attach it as a standalone release asset, and the app
         // downloads it into private storage on first run. See CoreRepository.
-        jniLibs.excludes += "lib/arm64-v8a/libxeno-core.so"
+        //
+        // The one consumer that must keep the core inside is the Play bundle
+        // (Play forbids fetching the core from GitHub), so build-play-aab.sh
+        // passes -Pxeno.keepCore to opt out of the exclusion.
+        if ((project.findProperty("xeno.keepCore") as String?) != "true") {
+            jniLibs.excludes += "lib/arm64-v8a/libxeno-core.so"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

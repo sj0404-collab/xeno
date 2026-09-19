@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-# The JNI GLUE, not the emulator core. Produces libarmsx3-jni.so, which
-# System.loadLibrary("armsx3-jni") brings up; it then dlopen()s the core
-# (libarmsx3-core.so, shipped as a prebuilt in jniLibs) and forwards to its
+# The JNI GLUE, not the emulator core. Produces libxeno-jni.so, which
+# System.loadLibrary("xeno-jni") brings up; it then dlopen()s the core
+# (libxeno-core.so, shipped as a prebuilt in jniLibs) and forwards to its
 # _rpcsx_* entry points. adrenotools lives HERE rather than in the core, so the
 # emulator stays free of a Qualcomm-specific dependency.
-project("armsx3-jni")
+project("xeno-jni")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE on)
@@ -149,7 +149,7 @@ target_compile_options(savers PRIVATE -O2 -ffast-math -Wall -Wno-unused-paramete
 target_link_libraries(savers log GLESv2 m)
 
 # ---------------------------------------------------------------------------
-# Discord Social SDK bridge -> libarmsx2_discord.so
+# Discord Social SDK bridge -> libxeno_discord.so
 #
 # Separate target, and the manifest runs it in its own process. That is a
 # LICENSING boundary, not a performance one: the Social SDK is proprietary with
@@ -167,10 +167,10 @@ if (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
         set_target_properties(discord_partner_sdk PROPERTIES
             IMPORTED_LOCATION ${DISCORD_SDK_ROOT}/arm64-v8a/libdiscord_partner_sdk.so)
 
-        add_library(armsx2_discord SHARED discord_bridge.cpp)
-        target_include_directories(armsx2_discord PRIVATE ${DISCORD_SDK_ROOT}/include)
-        target_compile_features(armsx2_discord PRIVATE cxx_std_17)
-        target_link_libraries(armsx2_discord discord_partner_sdk log android)
+        add_library(xeno_discord SHARED discord_bridge.cpp)
+        target_include_directories(xeno_discord PRIVATE ${DISCORD_SDK_ROOT}/include)
+        target_compile_features(xeno_discord PRIVATE cxx_std_17)
+        target_link_libraries(xeno_discord discord_partner_sdk log android)
     else()
         message(STATUS "discord_sdk not staged (proprietary, not in git); building without the Discord helper")
     endif()

@@ -76,11 +76,11 @@ fi
 # with minSdk 30 -- installable on devices that cannot execute it, and failing at dlopen with
 # nothing to explain why. Play serves one bundle to every device, so the ISA floor has to be the
 # lowest one ARMSX3 supports.
-CORE_SRC="$(cd "$HERE/.." && pwd)/build-legacy/android/libarmsx3-core.so"
+CORE_SRC="$(cd "$HERE/.." && pwd)/build-legacy/android/libxeno-core.so"
 JNI="$UI/app/src/main/jniLibs/arm64-v8a"
 
 if [ ! -f "$CORE_SRC" ]; then
-	echo "FAIL: legacy core not built. Run: ninja -C build-legacy android/libarmsx3-core.so" >&2
+	echo "FAIL: legacy core not built. Run: ninja -C build-legacy android/libxeno-core.so" >&2
 	exit 1
 fi
 
@@ -93,10 +93,10 @@ bash "$HERE/stamp-git-version.sh"
 
 echo "==> Staging the legacy core"
 mkdir -p "$JNI"
-"$STRIP" --strip-unneeded -o "$JNI/libarmsx3-core.so" "$CORE_SRC"
+"$STRIP" --strip-unneeded -o "$JNI/libxeno-core.so" "$CORE_SRC"
 
 echo "==> Building Play bundle (minSdk $MIN_SDK, minify off)"
-( cd "$UI" && ./gradlew --quiet :app:bundlePlayRelease "-Parmsx3.minSdk=$MIN_SDK" -Parmsx3.noMinify -Parmsx3.uploadSigning )
+( cd "$UI" && ./gradlew --quiet :app:bundlePlayRelease "-Parmsx3.minSdk=$MIN_SDK" -Parmsx3.noMinify -Parmsx3.uploadSigning -Pxeno.keepCore )
 
 AAB="$UI/app/build/outputs/bundle/playRelease/app-play-release.aab"
 [ -f "$AAB" ] || { echo "FAIL: no bundle produced at $AAB" >&2; exit 1; }
@@ -159,17 +159,17 @@ else
 fi
 
 # And the things that MUST be there.
-if LC_ALL=C grep -aqF "com.armsx3.play" "$MANIFEST"; then
-	echo "  ok: applicationId is com.armsx3.play"
+if LC_ALL=C grep -aqF "com.xeno.emulator.play" "$MANIFEST"; then
+	echo "  ok: applicationId is com.xeno.emulator.play"
 else
-	echo "FAIL: applicationId com.armsx3.play not in the manifest -- wrong flavor built?" >&2
+	echo "FAIL: applicationId com.xeno.emulator.play not in the manifest -- wrong flavor built?" >&2
 	fail=1
 fi
 
-if [[ "$LISTING" == *libarmsx3-core.so* ]]; then
+if [[ "$LISTING" == *libxeno-core.so* ]]; then
 	echo "  ok: core library present"
 else
-	echo "FAIL: libarmsx3-core.so missing from the bundle" >&2
+	echo "FAIL: libxeno-core.so missing from the bundle" >&2
 	fail=1
 fi
 
