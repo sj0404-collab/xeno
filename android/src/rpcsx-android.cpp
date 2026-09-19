@@ -4775,6 +4775,21 @@ static bool installPup(JNIEnv *env, fs::file &&pup_f, jlong progressId) {
 
   sendVshBootable(env, progressId);
 
+  // OOM protection: firmware unpacking needs ~500MB+ free RAM.
+  // On low-memory devices (< 4GB RAM), the PUP decryption + TAR extraction
+  // can hold 300-600MB in memory and trigger OOM kill.
+  const u64 avail_mem = utils::get_avail_memory();
+  const u64 min_required = 512 * 1024 * 1024; // 512 MB
+  if (avail_mem != 0 && avail_mem < min_required) {
+    rpcsx_android.error("installFw: insufficient memory (%llu MB available, need %llu MB)",
+                        avail_mem / (1024 * 1024), min_required / (1024 * 1024));
+    progress.failure(
+        fmt::format("Not enough free RAM to install firmware ({} MB available, "
+                    "need at least {} MB). Close other apps and try again.",
+                    avail_mem / (1024 * 1024), min_required / (1024 * 1024)));
+    return false;
+  }
+
   jlong processed = 0;
   for (const auto &update_filename : update_filenames) {
     auto update_file_stream = update_files.get_file(update_filename);
@@ -4790,9 +4805,20 @@ static bool installPup(JNIEnv *env, fs::file &&pup_f, jlong progressId) {
     SCEDecrypter self_dec(update_file);
     self_dec.LoadHeaders();
     self_dec.LoadMetadata(SCEPKG_ERK, SCEPKG_RIV);
-    self_dec.DecryptData();
 
-    auto dev_flash_tar_f = self_dec.MakeFile();
+    // Wrap decryption + extraction in try-catch to handle OOM gracefully.
+    // The decrypted dev_flash TAR can be 300-600MB in memory.
+    std::vector<fs::file> dev_flash_tar_f;
+    try {
+      self_dec.DecryptData();
+      dev_flash_tar_f = self_dec.MakeFile();
+    } catch (const std::bad_alloc &) {
+      rpcsx_android.error("installFw: out of memory during decryption (package=%s)",
+                          update_filename);
+      progress.failure(
+          "Out of memory while decrypting firmware. Close other apps and try again.");
+      return false;
+    }
 
     if (dev_flash_tar_f.size() < 3) {
       rpcsx_android.error(
@@ -4804,14 +4830,23 @@ static bool installPup(JNIEnv *env, fs::file &&pup_f, jlong progressId) {
 
     tar_object dev_flash_tar(dev_flash_tar_f[2]);
 
-    if (!dev_flash_tar.extract()) {
+    // Extract can also OOM if the TAR holds large files in memory.
+try {
+      if (!dev_flash_tar.extract()) {
 
-      rpcsx_android.error("Error while installing firmware: TAR contents are "
-                          "invalid. (package=%s)",
+        rpcsx_android.error("Error while installing firmware: TAR contents are "
+                            "invalid. (package=%s)",
+                            update_filename);
+
+        progress.failure(fmt::format("TAR contents are invalid (package=%s)",
+                                     update_filename));
+        return false;
+      }
+    } catch (const std::bad_alloc &) {
+      rpcsx_android.error("installFw: out of memory during TAR extraction (package=%s)",
                           update_filename);
-
-      progress.failure(fmt::format("TAR contents are invalid (package=%s)",
-                                   update_filename));
+      progress.failure(
+          "Out of memory while extracting firmware. Close other apps and try again.");
       return false;
     }
 
