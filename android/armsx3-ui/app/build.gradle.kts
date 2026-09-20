@@ -317,6 +317,9 @@ dependencies {
     // Google Drive API for cloud save sync
     implementation(libs.play.services.auth)
     implementation(libs.google.drive.api)
+    // GoogleAccountCredential lives in google-api-client-android; the Drive
+    // artifact only pulls google-api-client, which does not carry it.
+    implementation(libs.google.api.client.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

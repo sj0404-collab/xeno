@@ -101,9 +101,6 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK command-line tools
-        uses: android-actions/setup-android@v3
-
       - name: Install SDK packages
         # The sdkmanager download/install is the other big per-run cost; the
         # cached components above are pinned, so a cache hit can skip it wholly.
