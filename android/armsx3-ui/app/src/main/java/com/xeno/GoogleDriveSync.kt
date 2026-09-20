@@ -249,7 +249,7 @@ object GoogleDriveSync {
 
             // Download
             service.files().get(fileId)
-                .executeMediaAndDownloadTo(staged)
+                .executeMediaAndDownloadTo(FileOutputStream(staged))
 
             // Extract using same logic as CloudSync
             val dest = SaveDataImporter.savedataRoot() ?: return false
@@ -367,7 +367,7 @@ object GoogleDriveSync {
 
             // Download with resumable media
             service.files().get(file.id!!)
-                .executeMediaAndDownloadTo(local)
+                .executeMediaAndDownloadTo(FileOutputStream(local))
 
             local.absolutePath
         } catch (e: Exception) {
