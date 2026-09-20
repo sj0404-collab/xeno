@@ -237,7 +237,10 @@ jobs:
         # Best-effort, and runs even when the build step failed (which is exactly
         # when its parts are worth keeping): caching must never abort a successful
         # run just before the release step.
-        if: ${{ !cancelled() && steps.sdk-cache.outputs.cache-hit != 'true' }}
+        # Skip only when the cache was both restored complete AND reused; a run
+        # that just repaired a partial cache must save it, or every future run
+        # re-does the download it thought it was skipping.
+        if: ${{ !cancelled() && (steps.sdk-cache.outputs.cache-hit != 'true' || steps.verify-sdk.outputs.ok != 'true') }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
