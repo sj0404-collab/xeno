@@ -87,6 +87,27 @@ jobs:
             ${{ env.ANDROID_HOME }}/platforms/android-37.2
           key: android-sdk-${{ runner.os }}-v1
 
+      # A restored cache is only worth skipping the install for when the pieces
+      # the build actually needs are all there. The cache key is version-keyed,
+      # not content-keyed, so a stale/partial cache (save failed, older layout)
+      # restores "successfully" while missing cmake/NDK/platforms and the build
+      # then dies on "cmake not found" with the install step skipped by a cache
+      # hit. Check the real components, not the cache-key history.
+      - name: Verify cached SDK components
+        id: verify-sdk
+        shell: bash
+        run: |
+          SD="$(cygpath -u "$ANDROID_HOME")"
+          ok=1
+          [ -f "$SD/cmake/3.30.5/bin/cmake" ] || ok=0
+          [ -d "$SD/ndk/29.0.14206865" ]      || ok=0
+          [ -d "$SD/platforms/android-37" ]   || ok=0
+          if [ "$ok" -eq 1 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # librashader and libadrenotools are not submodules upstream; they are
       # fetched by hand per the repository README.
       - name: Fetch librashader
@@ -104,7 +125,10 @@ jobs:
       - name: Install SDK packages
         # The sdkmanager download/install is the other big per-run cost; the
         # cached components above are pinned, so a cache hit can skip it wholly.
-        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        # Reinstall also when the restored cache turned out incomplete (the
+        # verify step above), so a partial cache repairs itself instead of
+        # failing the build three attempts in a row.
+        if: steps.sdk-cache.outputs.cache-hit != 'true' || steps.verify-sdk.outputs.ok != 'true'
         shell: bash
         run: |
           # GitHub-hosted Windows images keep the SDK but not always the
