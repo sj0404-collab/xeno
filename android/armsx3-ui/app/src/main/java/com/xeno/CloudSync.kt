@@ -94,8 +94,10 @@ object CloudSync {
      * game downloads; both end up in URL paths and on disk, so any separators,
      * dot-dot segments, or control characters are rejected outright. Spaces
      * and Unicode are allowed (legitimate file names on a network share).
+     * Shared with [com.xeno.GoogleDriveSync] so both transports sanitize
+     * remote names identically.
      */
-    private fun safeComponent(name: String): String {
+    internal fun safeComponent(name: String): String {
         val candidate = name.trim().replace('\\', '/')
         if (candidate.isBlank()) return ""
         if (candidate.contains('\n') || candidate.contains('\r') || candidate.contains('\u0000')) return ""

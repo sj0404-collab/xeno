@@ -24,13 +24,13 @@ import com.google.api.services.drive.model.File
 import com.google.api.services.drive.model.FileList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import net.rpcsx.RPCSX
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.zip.ZipEntry
-import java.io.FileOutputStream
-import java.io.FileInputStream
 import java.util.zip.ZipOutputStream
 import java.util.zip.ZipInputStream
 
@@ -167,8 +167,7 @@ object GoogleDriveSync {
     /** Update auto-push preference. */
     fun updateAutoPush(enabled: Boolean) {
         autoPush = enabled
-        val context = com.xeno.runtime.MainActivityRuntime.applicationContext
-            ?: return
+        val context = com.xeno.runtime.MainActivityRuntime.instance?.applicationContext ?: return
         val prefs = context.getSharedPreferences("xeno_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean(PrefAutoPush, enabled).apply()
     }
@@ -185,11 +184,13 @@ object GoogleDriveSync {
             .setSpaces("appDataFolder")
             .setFields("files(id,name)")
             .execute()
-        list.files.firstOrNull()?.id ?: service.files().create(File().apply {
-            name = name
+        val folderName = name
+        val created = File().apply {
+            this.name = folderName
             mimeType = "application/vnd.google-apps.folder"
             parents = listOf(parentId)
-        }).setFields("id").execute().id
+        }
+        list.files.firstOrNull()?.id ?: service.files().create(created).setFields("id").execute().id
     }
 
     private suspend fun getSavesFolder(): String = getOrCreateFolder(SAVES_FOLDER_NAME)
@@ -335,7 +336,7 @@ object GoogleDriveSync {
     /** Download a game file from Drive games folder. */
     suspend fun downloadGame(remoteName: String): String? = withContext(Dispatchers.IO) {
         val safeRemote = com.xeno.CloudSync.safeComponent(remoteName)
-        if (safeRemote.isEmpty()) return null
+        if (safeRemote.isEmpty()) return@withContext null
 
         val local = java.io.File(RPCSX.rootDirectory + "games", safeRemote.substringAfterLast('/'))
         local.parentFile?.mkdirs()
@@ -350,17 +351,17 @@ object GoogleDriveSync {
                 .setFields("files(id,size)")
                 .execute()
 
-            val file = list.files.firstOrNull() ?: return null
+            val file = list.files.firstOrNull() ?: return@withContext null
 
             // Check local cache
             if (local.exists()) {
                 val remoteSize = file.size?.toLong() ?: -1
                 if (remoteSize >= 0 && local.length() == remoteSize) {
-                    return local.absolutePath
+                    return@withContext local.absolutePath
                 }
                 if (remoteSize < 0 && local.length() > 0) {
                     Log.i(TAG, "offline fallback: launching cached $safeRemote")
-                    return local.absolutePath
+                    return@withContext local.absolutePath
                 }
             }
 
@@ -379,7 +380,7 @@ object GoogleDriveSync {
     /** Get streaming URL for a game (Drive supports Range requests via alt=media). */
     suspend fun streamGameUrl(remoteName: String): String? = withContext(Dispatchers.IO) {
         val safeRemote = com.xeno.CloudSync.safeComponent(remoteName)
-        if (safeRemote.isEmpty()) return null
+        if (safeRemote.isEmpty()) return@withContext null
 
         try {
             val service = getDriveService()
@@ -391,7 +392,7 @@ object GoogleDriveSync {
                 .setFields("files(id)")
                 .execute()
 
-            val file = list.files.firstOrNull() ?: return null
+            val file = list.files.firstOrNull() ?: return@withContext null
             // Drive supports Range requests on the alt=media endpoint
             "https://www.googleapis.com/drive/v3/files/${file.id}?alt=media"
         } catch (e: Exception) {

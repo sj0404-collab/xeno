@@ -43,6 +43,7 @@ import com.xeno.i18n.str
 import com.xeno.ui.Colors
 import com.xeno.ui.InGameOverlay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.rpcsx.ProgressRepository
@@ -475,10 +476,17 @@ private fun GoogleDriveSection() {
             modifier = Modifier.padding(start = 4.dp, top = 4.dp),
         )
 
+        // str() is @Composable and the lambdas below run outside composition
+        // (onClick handlers / coroutines), so hoist every label here.
+        val signInWorkingLabel = str("gdrive.signin.working")
+        val signedInLabel = str("gdrive.signedin")
+        val signInCancelledLabel = str("gdrive.signin.cancelled")
+        val notSignedInLabel = str("gdrive.notsignedin")
+
         if (!signedIn) {
             val signIn = {
                 busy = true
-                status = str("gdrive.signin.working")
+                status = signInWorkingLabel
                 // Launch Google Sign-In via ActivityResultLauncher in MainActivityRuntime
                 com.xeno.runtime.MainActivityRuntime.launchGoogleSignIn()
                 // The result is handled asynchronously via ActivityResultLauncher callback
@@ -490,12 +498,13 @@ private fun GoogleDriveSection() {
                         attempts++
                     }
                     if (com.xeno.GoogleDriveSync.isSignedIn()) {
-                        status = str("gdrive.signedin").format(com.xeno.GoogleDriveSync.accountName() ?: "")
+                        status = signedInLabel.format(com.xeno.GoogleDriveSync.accountName() ?: "")
                     } else {
-                        status = str("gdrive.signin.cancelled")
+                        status = signInCancelledLabel
                     }
                     busy = false
                 }
+                Unit
             }
             OutlinedButton(
                 onClick = signIn,
@@ -508,7 +517,7 @@ private fun GoogleDriveSection() {
             // Signed in — show account and controls
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    str("gdrive.signedin").format(accountName ?: ""),
+                    signedInLabel.format(accountName ?: ""),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
@@ -517,9 +526,10 @@ private fun GoogleDriveSection() {
                     busy = true
                     scope.launch(Dispatchers.IO) {
                         com.xeno.GoogleDriveSync.signOut(context)
-                        status = str("gdrive.notsignedin")
+                        status = notSignedInLabel
                         busy = false
                     }
+                    Unit
                 }
                 OutlinedButton(
                     onClick = signOut,
@@ -538,7 +548,6 @@ private fun GoogleDriveSection() {
             )
 
             // Hoist labels for coroutine scope
-            val disabledLabel = str("gdrive.notsignedin")
             val pushWorkingLabel = str("gdrive.working")
             val pushFailLabel = str("gdrive.failed")
             val pushedLabel = str("gdrive.pushed")
@@ -553,13 +562,14 @@ private fun GoogleDriveSection() {
                     scope.launch(Dispatchers.IO) {
                         try {
                             val n = com.xeno.GoogleDriveSync.pushAllSaves()
-                            status = str("gdrive.pushed").format(n)
+                            status = pushedLabel.format(n)
                         } catch (e: Exception) {
-                            status = str("gdrive.failed").format(e.message ?: "")
+                            status = pushFailLabel.format(e.message ?: "")
                         } finally {
                             busy = false
                         }
                     }
+                    Unit
                 }
                 OutlinedButton(
                     onClick = push,
@@ -573,13 +583,14 @@ private fun GoogleDriveSection() {
                     scope.launch(Dispatchers.IO) {
                         try {
                             val n = com.xeno.GoogleDriveSync.pullAllSaves()
-                            status = str("gdrive.pulled").format(n)
+                            status = pulledLabel.format(n)
                         } catch (e: Exception) {
-                            status = str("gdrive.failed").format(e.message ?: "")
+                            status = pullFailLabel.format(e.message ?: "")
                         } finally {
                             busy = false
                         }
                     }
+                    Unit
                 }
                 OutlinedButton(
                     onClick = pull,
@@ -600,6 +611,11 @@ private fun GoogleDriveSection() {
         }
     }
 }
+
+/** GitHub save sync block: token/repo, verify, auto-push, push/pull. Independent of
+ *  WebDAV and Google Drive; the second GitHub transport mirrors [CloudSection]. */
+@Composable
+private fun GithubCloudSection() {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
