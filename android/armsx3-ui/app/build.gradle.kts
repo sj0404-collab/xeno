@@ -222,6 +222,15 @@ android {
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Both Google auth jars ship a legacy JAR index, so the merge sees two
+            // files at the same path and stops the build:
+            //   2 files found with path 'META-INF/INDEX.LIST' from inputs:
+            //     - com.google.auth:google-auth-library-oauth2-http:1.30.0/...
+            //     - com.google.auth:google-auth-library-credentials:1.30.0/...
+            // that fails :app:mergeGithubReleaseJavaResource, i.e. AFTER the C++
+            // core has already linked. INDEX.LIST is the pre-Android signing index
+            // (v1 JAR manifests); dex ignores it, so dropping it loses nothing.
+            excludes += "/META-INF/INDEX.LIST"
         }
     }
 }
