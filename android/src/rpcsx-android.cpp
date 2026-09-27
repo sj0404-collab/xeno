@@ -3635,6 +3635,19 @@ extern "C" int _rpcsx_boot(std::string_view path_) {
     if (auto eboot = locateEbootPath(path); !eboot.empty() && fs::is_file(eboot)) {
       rpcsx_android.notice("boot: resolved directory '%s' to '%s'", path, eboot);
       path = eboot;
+    } else {
+      // Previously silent. A directory with no EBOOT is a folder that only had a title's
+      // SHAPE -- which used to be enough for the library to list it, so this was the path
+      // behind every "Game failed to start: InvalidFileOrFolder" on a folder tile: the
+      // fallback below hands BootGame a directory, which answers invalid_file_or_folder
+      // with nothing to say why. Name the folder and the files that were looked for, so
+      // the next report can be acted on instead of re-derived.
+      rpcsx_android.error(
+          "boot: '%s' is a directory with no bootable EBOOT. Tried EBOOT.BIN, USRDIR/EBOOT.BIN, "
+          "USRDIR/ISO.BIN.EDAT and PS3_GAME/USRDIR/EBOOT.BIN. A folder is only a game if it has one "
+          "of those; this one is not a title the emulator can boot, and BootGame below will "
+          "reject the bare directory.",
+          path);
     }
   }
 

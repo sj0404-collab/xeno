@@ -724,9 +724,26 @@ open class MainActivityRuntime : ComponentActivity() {
                         // (HomeViewModel.launch), so reaching here means the lock state was
                         // stale — a licence deleted outside the app, say. Point at the per-game
                         // action that fixes it, which a rescan will also surface as a badge.
-                        val hint = if (reason == "DecryptionError")
-                            " — it needs a .rap licence. Long-press the game and choose Install licence."
-                        else ""
+                        val hint = when (reason) {
+                            "DecryptionError" ->
+                                " — it needs a .rap licence. Long-press the game and choose Install licence."
+                            // Three very different causes, one opaque answer, and the folder
+                            // case used to be invisible in the log entirely. Say which one it
+                            // is: the fix is a permissions toggle, a different file, or nothing
+                            // at all (a folder that is not a title), and the user cannot tell
+                            // them apart from "InvalidFileOrFolder".
+                            "InvalidFileOrFolder" -> when {
+                                m_szGamefile.isEmpty() -> " — no game was selected."
+                                File(m_szGamefile).isDirectory ->
+                                    " — this folder has no EBOOT.BIN inside it, so it is not a " +
+                                    "game the emulator can boot."
+                                !File(m_szGamefile).canRead() ->
+                                    " — the file cannot be read. Grant All files access, or move " +
+                                    "the game into the games directory."
+                                else -> " — the file could not be read as a disc."
+                            }
+                            else -> ""
+                        }
                         instance?.let { act ->
                             act.runOnUiThread {
                                 android.widget.Toast.makeText(
