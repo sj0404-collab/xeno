@@ -542,7 +542,7 @@ class GameLibraryRepository(private val context: Context) {
 
     /** [isPs3GameFolder] over a SAF tree. */
     private fun isPs3GameDocument(directory: DocumentFile): Boolean {
-        val children = runCatching { directory.listFiles() }.getOrNull() ?: return false
+        val children = runCatching { directory.listFiles() }.getOrNull()?.toList() ?: return false
         fun find(name: String) = children.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
         // The same bar as the raw scan, reduced to what a document tree can answer: an EBOOT the
@@ -553,7 +553,7 @@ class GameLibraryRepository(private val context: Context) {
             val matches = levels.filter { it.name.equals(segments.first(), ignoreCase = true) }
             if (segments.size == 1) return matches.any { it.isFile }
             return matches.filter { it.isDirectory }.any { dir ->
-                hasEboot(runCatching { dir.listFiles() }.getOrNull().orEmpty(), segments.drop(1))
+                hasEboot(runCatching { dir.listFiles() }.getOrNull().orEmpty().toList(), segments.drop(1))
             }
         }
         fun hasBootableEboot() = EBOOT_PATHS.any { hasEboot(children, it.split('/')) }
