@@ -127,6 +127,13 @@ jobs:
           git clone --depth 1 https://github.com/SnowflakePowered/librashader 3rdparty/librashader
           git clone --depth 1 --recursive https://github.com/bylaws/libadrenotools \
             android/armsx3-ui/app/src/main/cpp/libadrenotools
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
       - name: Build toolchain image
         uses: docker/build-push-action@v6
         with:
