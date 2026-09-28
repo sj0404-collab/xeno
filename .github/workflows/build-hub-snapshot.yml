@@ -158,7 +158,7 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p dist
-          find out -name '*.apk' -exec cp -v {} dist/ +
+          find out -name '*.apk' -exec cp -v {} dist/ \;
           ls -la dist/
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
