@@ -151,15 +151,18 @@ jobs:
           for i in 1 2 3; do
             if docker run --rm \
                 -v "$PWD:/src" -w /src \
+                -u "$(id -u):$(id -g)" \
                 -e ANDROID_HOME=/opt/android-sdk \
                 -e JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
                 -e GRADLE_USER_HOME=/src/.gradle \
                 -e OUT_DIR=/src/out \
+                -e CMAKE_VERSION=3.30.5 \
                 -e VARIANTS=a13 \
                 xeno-android-ci:latest \
-                bash tools/build-variants.sh; then
+                bash android/build-variants.sh; then
               status=0; break
             fi
+            echo "build attempt $i failed, retry in 20s"; sleep 20
           done
           exit $status
       - name: Collect APKs
