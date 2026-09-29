@@ -81,7 +81,7 @@ Then build the app:
 
     cd android/armsx3-ui
     export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-    ./gradlew :app:assembleGithubRelease "-Parmsx3.minSdk=33"
+    ./gradlew :app:assembleGithubRelease "-Pxeno.minSdk=33"
 
 The apk lands in app/build/outputs/apk/github/release/.
 

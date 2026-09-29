@@ -65,7 +65,7 @@ MSG
 	exit 1
 fi
 
-# armsx3.noMinify because AGP 9.2.1 cannot bundle with R8 on: R8 writes mapping.prt, a
+# xeno.noMinify because AGP 9.2.1 cannot bundle with R8 on: R8 writes mapping.prt, a
 # compressed per-class archive, and packageBundle demands a plain mapping.txt. ARMSX2 ships
 # its Play build with minify off too, so this is the existing precedent rather than a new
 # compromise.
@@ -96,7 +96,7 @@ mkdir -p "$JNI"
 "$STRIP" --strip-unneeded -o "$JNI/libxeno-core.so" "$CORE_SRC"
 
 echo "==> Building Play bundle (minSdk $MIN_SDK, minify off)"
-( cd "$UI" && ./gradlew --quiet :app:bundlePlayRelease "-Parmsx3.minSdk=$MIN_SDK" -Parmsx3.noMinify -Parmsx3.uploadSigning -Pxeno.keepCore )
+( cd "$UI" && ./gradlew --quiet :app:bundlePlayRelease "-Pxeno.minSdk=$MIN_SDK" -Pxeno.noMinify -Pxeno.uploadSigning -Pxeno.keepCore )
 
 AAB="$UI/app/build/outputs/bundle/playRelease/app-play-release.aab"
 [ -f "$AAB" ] || { echo "FAIL: no bundle produced at $AAB" >&2; exit 1; }

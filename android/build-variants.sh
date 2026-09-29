@@ -104,6 +104,12 @@ VARIANT_a15="29.0.14206865:35:armv8.2-a+dotprod+fp16:a15-armv8.2-sdk35"
 # standard for 8 Gen 1 and newer, covers current devices, and cuts a cold
 # full-LLVM build from ~6 hours to ~45 minutes. legacy/a11/a15 stay available
 # for device-level rollouts with VARIANTS="legacy a11 a13 a15".
+#
+# This default is not advisory: every core is a full LLVM build from cold in its
+# own directory with no shared objects, so a four-variant run is four of those,
+# back to back. The CI workflows pass VARIANTS=a13 explicitly and keep only the
+# a13 cache, so switching the default is the only thing that turns a ~45 minute
+# green run into an hours-long one. Keep it as a deliberate, separate act.
 VARIANTS="${VARIANTS:-${*:-a13}}"
 
 version_name() {
@@ -231,10 +237,17 @@ local native_flags=()
 
 	# assembleGithubRelease, not assembleRelease: the flavor split means there is no
 	# flavorless release variant any more. The play bundle is built by build-play-aab.sh.
+	#
+	# The property is xeno.minSdk, NOT armsx3.minSdk: app/build.gradle.kts only ever reads the
+	# xeno.* names, and an unknown -P is accepted silently, so the armsx3 spelling built the
+	# release with the default minSdk 33 for EVERY variant -- the A11/A15 APKs were shipping
+	# an API-33 minSdk against an API-30/35 core and nothing in the build complained. A
+	# variant that only sets api 30/35 and leaves minSdk at 33 is simply unreachable, so
+	# there is no way to notice from the APK's own output either.
 	if [ -f "$UI/gradlew.bat" ] && [[ "$NDK_PREBUILT" == windows-* ]]; then
-		( cd "$UI" && cmd //c "gradlew.bat --quiet :app:assembleGithubRelease -Parmsx3.minSdk=$api" )
+		( cd "$UI" && cmd //c "gradlew.bat --quiet :app:assembleGithubRelease -Pxeno.minSdk=$api" )
 	else
-		( cd "$UI" && sh ./gradlew --quiet :app:assembleGithubRelease "-Parmsx3.minSdk=$api" )
+		( cd "$UI" && sh ./gradlew --quiet :app:assembleGithubRelease "-Pxeno.minSdk=$api" )
 	fi
 
 	local out="$OUT_DIR/ARMSX3-$(version_name)-$suffix.apk"

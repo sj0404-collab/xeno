@@ -14,6 +14,13 @@
 #     build step retries up to 3 times to ride out flaky pulls;
 #   * cache saves are best-effort (continue-on-error) - a cache problem must
 #     never fail an otherwise green build.
+#
+# One core, one build dir. This workflow builds a13 only and says so explicitly
+# rather than relying on build-variants.sh's default. Every core is a full LLVM
+# build from cold in its own directory sharing no objects, so a legacy/a11/a13/a15
+# run is four of them back to back -- the thing the a13-only cache key below is
+# built around. A variant rollout stays a one-line change here plus a matching
+# cache entry, not a silent multi-hour regression.
 
 name: Docker ARM64 APK
 
@@ -24,10 +31,6 @@ on:
     tags:
       - "0.*"
   workflow_dispatch:
-    inputs:
-      variant:
-        description: APK ISA/API variant (legacy, a11, a13, a15)
-        default: "a13"
 
 concurrency:
   group: docker-arm64-apk-${{ github.ref }}-${{ github.event_name }}
@@ -64,6 +67,11 @@ jobs:
               android/configure.sh \
               android/build-variants.sh \
               android/stamp-git-version.sh | sha1sum | cut -c1-12)"
+          # Single core: the key is scoped a13, and that is the only build dir
+          # this workflow ever populates. A second variant would need its own
+          # restore/save pair -- sharing this key would restore an a13 tree and
+          # silently build a13 into it, which configured_ok() catches, but only
+          # after ninja has already relinked the wrong core.
           echo "a13-bin-key=xeno-docker-build-a13-${{ github.ref_name }}-llvm-${LLVM_PIN}-cfg-${RECIPE}" >> "$GITHUB_OUTPUT"
 
           GRADLE_FILES="android/armsx3-ui/settings.gradle.kts
@@ -98,6 +106,22 @@ jobs:
           key: ${{ steps.cache-keys.outputs.gradle-key }}
           restore-keys: |
             gradle-Linux-
+
+      # The two hand-fetched dependency trees, cached on top of the Gradle cache so
+      # a warm run does no network fetches beyond the LLVM submodule checkout.
+      # Keyed on the workflow's own revision rather than their upstream HEADs on
+      # purpose: these are build inputs, and an upstream bump is picked up by the
+      # fetch/reset steps above within the same run, not by a key change.
+      - name: Restore fetched dependency trees
+        uses: actions/cache/restore@v4
+        id: deps-cache
+        with:
+          path: |
+            ${{ github.workspace }}/3rdparty/librashader
+            ${{ github.workspace }}/android/armsx3-ui/app/src/main/cpp/libadrenotools
+          key: xeno-fetched-deps-${{ github.run_id }}
+          restore-keys: |
+            xeno-fetched-deps-
 
       # Fast-forward the restored LLVM build tree.
       #
@@ -144,12 +168,29 @@ jobs:
           cache-to: type=gha,mode=max,scope=xeno-android-ci
 
       # librashader and libadrenotools are not submodules upstream; fetched by
-      # hand per the repository README.
+      # hand per the repository README. libadrenotools is a --recursive clone and
+      # is the slowest of the two, so both trees are cached -- they are build
+      # inputs the container compiles against, and re-cloning them on every run
+      # buys nothing: they are pinned to upstream HEAD, not to our tree, so a
+      # change in them is what the cache key's restore-keys let through anyway.
       - name: Fetch librashader
-        run: git clone --depth 1 https://github.com/SnowflakePowered/librashader 3rdparty/librashader
+        run: |
+          if [ -d 3rdparty/librashader/.git ]; then
+            git -C 3rdparty/librashader fetch --depth 1 origin && \
+              git -C 3rdparty/librashader reset --hard origin/HEAD
+          else
+            git clone --depth 1 https://github.com/SnowflakePowered/librashader 3rdparty/librashader
+          fi
 
       - name: Fetch libadrenotools
-        run: git clone --depth 1 --recursive https://github.com/bylaws/libadrenotools android/armsx3-ui/app/src/main/cpp/libadrenotools
+        run: |
+          if [ -d android/armsx3-ui/app/src/main/cpp/libadrenotools/.git ]; then
+            git -C android/armsx3-ui/app/src/main/cpp/libadrenotools fetch --depth 1 origin && \
+              git -C android/armsx3-ui/app/src/main/cpp/libadrenotools reset --hard origin/HEAD && \
+              git -C android/armsx3-ui/app/src/main/cpp/libadrenotools submodule update --init --recursive --depth 1
+          else
+            git clone --depth 1 --recursive https://github.com/bylaws/libadrenotools android/armsx3-ui/app/src/main/cpp/libadrenotools
+          fi
 
       # The actual build, fully inside the container. The workspace is mounted
       # read-write at /src so build-a13 and the gradle cache live under the
@@ -158,7 +199,11 @@ jobs:
       - name: Build ARM64 APK in Docker container
         shell: bash
         env:
-          VARIANTS: "${{ github.event.inputs.variant || 'a13' }}"
+          # a13, hardcoded on purpose -- see the header. Every core is a full cold
+          # LLVM build with no objects shared between variants, and only the a13
+          # build dir is cached below, so any other value here is a guaranteed
+          # hours-long cold run.
+          VARIANTS: "a13"
         run: |
           # OUT_DIR is /src/out; build-variants.sh does not mkdir it, and the
           # bind mount only creates /src, so the final APK copy would fail
@@ -217,6 +262,19 @@ jobs:
         with:
           path: ${{ github.workspace }}/.gradle
           key: ${{ steps.cache-keys.outputs.gradle-key }}-${{ github.run_id }}
+
+      # Run-unique key for the same reason as the build dir: the fetch steps reset
+      # these to upstream HEAD on every run, so the tree is expected to differ
+      # between runs and a fixed key would pin the first one saved forever.
+      - name: Save fetched dependency trees
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ github.workspace }}/3rdparty/librashader
+            ${{ github.workspace }}/android/armsx3-ui/app/src/main/cpp/libadrenotools
+          key: xeno-fetched-deps-${{ github.run_id }}
 
       - name: Create GitHub Release
         # Manual dispatches on master are for producing an artifact, not a
